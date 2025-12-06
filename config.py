@@ -37,8 +37,8 @@ def get_experiment_config(iteration=0, num_iterations=None):
         "model_choice": ("medmnist" if dataset == 'medmnist_oct' else "EfficientNetB0"),
 
         # Constraints configuration (index validated dynamically against num_classes)
-        "constrained_class_index": 1,
+        "constrained_class_index": 0,
         "constraints": 180,
-        "mu": 40 / 600 # 13/600
+        "mu": 13 / 600 # 13/600
     }
     return params, exp_name
