@@ -1,0 +1,5 @@
+*.pth
+*.png
+
+experiment_files/
+files/
