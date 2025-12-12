@@ -98,7 +98,10 @@ for percent in constraints_percentage_list:
         criterion = CustomLoss(constrained_class_index=constrained_class_index, C=C, device=device)
 
         # Adjust learning rate
-        current_lr = params["initial_learning_rate"] / torch.mean(C)
+        # Use base (unnormalized) LR here; per-batch dynamic scaling
+        # in train.py will switch between normalized and unnormalized
+        # based on the tanh_term from the loss.
+        current_lr = params["initial_learning_rate"]
         optimizer = optim.Adam(model.parameters(), lr=current_lr, weight_decay=params["weight_decay"])
 
         if number_of_iterations == 1:

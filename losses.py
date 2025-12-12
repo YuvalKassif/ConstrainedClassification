@@ -8,6 +8,8 @@ class CustomLoss(nn.Module):
         self.constrained_class_index = constrained_class_index
         self.C = C.to(device)
         self.device = device
+        # Expose recent tanh modulation summary for dynamic LR control
+        self.last_tanh_mean = None
 
     def forward(self, y_pred, y_true):
         # Convert logits to probabilities
@@ -25,6 +27,13 @@ class CustomLoss(nn.Module):
 
         # Calculate the tanh modulation term
         tanh_term = torch.tanh(50000000 * (max_y_t - y_k_constrained)).unsqueeze(1)
+        # Cache a scalar summary for external use (e.g., LR selection)
+        # Clamp to [0,1] and detach to avoid graph retention
+        try:
+            self.last_tanh_mean = torch.clamp(tanh_term.mean(), 0.0, 1.0).detach()
+        except Exception:
+            # Fallback in case of unexpected shapes
+            self.last_tanh_mean = None
 
         # Added this normalization -> consider to erase
         # self.C = self.C / torch.max(self.C) * 5  # or torch.sum(self.C)

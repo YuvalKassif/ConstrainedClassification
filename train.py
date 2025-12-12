@@ -54,6 +54,24 @@ def train_model(model, criterion, optimizer, scheduler, device, train_loader, va
             optimizer.zero_grad()
             outputs = model(inputs)
             loss = criterion(outputs, labels)
+            # Dynamic LR selection based on tanh_term from the loss:
+            # - When tanh ~ 0   -> use normalized LR (divide by mean(C))
+            # - When tanh ~ 1   -> use unnormalized base LR
+            # We interpolate smoothly: lr = (1 - t) * (base/meanC) + t * base
+            try:
+                t = criterion.last_tanh_mean
+                if t is not None:
+                    # Compute epoch base LR from scheduler parameters
+                    base_lr = scheduler.init_lr * (0.8 ** (epoch // scheduler.lr_decay_epoch))
+                    mean_c = float(criterion.C.mean().detach().item()) if hasattr(criterion, 'C') else 1.0
+                    norm_lr = base_lr / max(mean_c, 1e-12)
+                    t_val = float(torch.clamp(t, 0.0, 1.0).item())
+                    effective_lr = (1.0 - t_val) * norm_lr + t_val * base_lr
+                    for pg in optimizer.param_groups:
+                        pg['lr'] = max(effective_lr, 1e-12)
+            except Exception:
+                # If anything goes wrong, keep current optimizer LR
+                pass
             loss.backward()
             optimizer.step()
 
