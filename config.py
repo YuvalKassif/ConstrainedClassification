@@ -4,7 +4,8 @@ from utils import save_parameters, generate_exp_name
 def get_experiment_config(iteration=0, num_iterations=None):
     exp_name = generate_exp_name()
 
-    # Choose one of: 'kneeKL224', 'medmnist_oct', 'medmnist_blood' (alias: 'bloodmnist'), 'lc25000'
+    # Choose one of: 'kneeKL224', 'medmnist_oct', 'medmnist_blood' (alias: 'bloodmnist'),
+    # 'medmnist_derma' (aliases: 'dermamnist', 'derma'), 'lc25000'
     dataset = 'medmnist_blood'
 
     params = {
@@ -21,12 +22,12 @@ def get_experiment_config(iteration=0, num_iterations=None):
         "dropout_rate": 0.0,
         "decay_epoch": 5,
         "decay_factor": 0.8,
-        "patience": 3,
+        "patience": 5,
         "num_iterations": num_iterations,
         "num_iteration": iteration,
         "weight_decay": 1e-4,
         "batch_size": 32,
-        "epochs": 25,
+        "epochs": 45,
 
         # Model choice: 'medmnist' (SimpleCNN) or any of
         # 'EfficientNetB0', 'EfficientNetB5', 'ResNet50', 'ResNet101'
@@ -37,8 +38,8 @@ def get_experiment_config(iteration=0, num_iterations=None):
         "model_choice": ("medmnist" if dataset == 'medmnist_oct' else "EfficientNetB0"),
 
         # Constraints configuration (index validated dynamically against num_classes)
-        "constrained_class_index": 0,
+        "constrained_class_index": 5,
         "constraints": 180,
-        "mu": 13 / 600 # 13/600
+        "mu": 8 / 600 # 13/600
     }
     return params, exp_name

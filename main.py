@@ -65,7 +65,7 @@ def _compute_test_counts(loader):
 true_test_counts = _compute_test_counts(test_loader)
 print(f"[DEBUG] Test label counts (by class index): {true_test_counts}")
 # constraints_percentage_list = [50]
-constraints_percentage_list = [90, 70, 50, 30]
+constraints_percentage_list = [90, 80, 70, 60, 50, 40, 30, 20]
 # constraints_percentage_list = [80,60, 40, 20]
 
 # Placeholder for storing the first model
@@ -87,6 +87,10 @@ for percent in constraints_percentage_list:
         number_of_iterations += 1
         print("------- Iteration", number_of_iterations, "-------")
         print(C)
+        try:
+            print(f"[DEBUG] Start iter {number_of_iterations}: mean(C)={C.mean().item():.6f}, min={C.min().item():.6f}, max={C.max().item():.6f}")
+        except Exception:
+            pass
         print("Contstraint index:", constrained_class_index)
         model_choice = params["model_choice"]
         set_seed(seed)
@@ -170,10 +174,12 @@ for percent in constraints_percentage_list:
             break
 
         # Update C using optimization
-        # mu = 8 / 600  # Learning rate for optimization
         mu = params["mu"]
         C += mu * dF_dN_K_p_val
         C[params["constrained_class_index"]] = 1
+        # Normalize to mean(C) == 1 while preserving ratios (and allowing constrained < 1)
+        # C = C / (C.mean() + 1e-12)
+
         params["C_k"] = C
 
     print('Achieved constraints with', number_of_iterations, 'iterations')
