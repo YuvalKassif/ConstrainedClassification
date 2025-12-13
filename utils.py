@@ -123,7 +123,9 @@ def plot_training_results(history, model_choice, total_time, params, timestamp, 
     plt.tight_layout()
 
     # Determine the save path
-    save_path = Path(f'savedModels1/{timestamp}/{iteration_timestamp}')
+    dataset = params.get("dataset", "unknown_dataset")
+    constrained_idx = params.get("constrained_class_index", params.get("constrained_class", "unknown_constraint"))
+    save_path = Path(f'results/{dataset}/{constrained_idx}/{timestamp}/{iteration_timestamp}')
     save_path.mkdir(parents=True, exist_ok=True)  # Ensure the directory exists
 
     # Save the figure
@@ -165,12 +167,24 @@ def plot_comparison():
     plt.show()
 
 
-def save_parameters(params, exp_name, timestamp, iteration_timestamp, filename="experiment_config.json"):
+def save_parameters(params, exp_name, timestamp, iteration_timestamp, filename="experiment_config.json", dataset=None, constrained_class_index=None):
     # Convert any tensors in params to lists
     serializable_params = {k: v.tolist() if isinstance(v, torch.Tensor) else v for k, v in params.items()}
 
     # Adding a timestamp to each experiment for uniqueness
-    file_path = Path(f'savedModels1/{timestamp}/{iteration_timestamp}/{filename}')
+    dataset = dataset or (params.get("dataset") if isinstance(params, dict) else None) or "unknown_dataset"
+    constrained = (
+        constrained_class_index
+        if constrained_class_index is not None
+        else (
+            params.get("constrained_class_index")
+            if isinstance(params, dict) and "constrained_class_index" in params
+            else (params.get("constrained_class") if isinstance(params, dict) else None)
+        )
+    )
+    if constrained is None:
+        constrained = "unknown_constraint"
+    file_path = Path(f'results/{dataset}/{constrained}/{timestamp}/{iteration_timestamp}/{filename}')
     # Create the directory if it does not exist
     file_path.parent.mkdir(parents=True, exist_ok=True)
     with open(file_path, 'w') as f:
@@ -178,9 +192,9 @@ def save_parameters(params, exp_name, timestamp, iteration_timestamp, filename="
 
     print(f"Parameters saved to {file_path}")
 
-def save_test_counts(class_count, exp_name, timestamp, iteration_timestamp, filename="class_count.json"):
+def save_test_counts(class_count, exp_name, timestamp, iteration_timestamp, dataset, constrained_class_index, filename="class_count.json"):
     # Adding a timestamp to each experiment for uniqueness
-    file_path = Path(f'savedModels1/{timestamp}/{iteration_timestamp}/{filename}')
+    file_path = Path(f'results/{dataset}/{constrained_class_index}/{timestamp}/{iteration_timestamp}/{filename}')
     # Create the directory if it does not exist
     file_path.parent.mkdir(parents=True, exist_ok=True)
     with open(file_path, 'w') as f:

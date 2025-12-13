@@ -22,7 +22,7 @@ def get_experiment_config(iteration=0, num_iterations=None):
         "dropout_rate": 0.0,
         "decay_epoch": 5,
         "decay_factor": 0.8,
-        "patience": 5,
+        "patience": 6,
         "num_iterations": num_iterations,
         "num_iteration": iteration,
         "weight_decay": 1e-4,
@@ -38,7 +38,7 @@ def get_experiment_config(iteration=0, num_iterations=None):
         "model_choice": ("medmnist" if dataset == 'medmnist_oct' else "EfficientNetB0"),
 
         # Constraints configuration (index validated dynamically against num_classes)
-        "constrained_class_index": 5,
+        "constrained_class_index": 2,
         "constraints": 180,
         "mu": 8 / 600 # 13/600
     }

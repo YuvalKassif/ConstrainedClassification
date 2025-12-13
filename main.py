@@ -65,8 +65,8 @@ def _compute_test_counts(loader):
 true_test_counts = _compute_test_counts(test_loader)
 print(f"[DEBUG] Test label counts (by class index): {true_test_counts}")
 # constraints_percentage_list = [50]
-constraints_percentage_list = [90, 80, 70, 60, 50, 40, 30, 20]
-# constraints_percentage_list = [80,60, 40, 20]
+# constraints_percentage_list = [90, 80, 70, 60, 50, 40, 30, 20]
+constraints_percentage_list = [90,70, 50, 30]
 
 # Placeholder for storing the first model
 first_model = None
@@ -127,7 +127,14 @@ for percent in constraints_percentage_list:
 
         # Evaluate on the test set for both PTO and PAO
         class_count = count_predictions_per_class(current_model, test_loader, device)
-        save_test_counts(class_count, exp_name=params["exp_name"], timestamp=base_timestamp, iteration_timestamp=iteration_timestamp)
+        save_test_counts(
+            class_count,
+            exp_name=params["exp_name"],
+            timestamp=base_timestamp,
+            iteration_timestamp=iteration_timestamp,
+            dataset=params.get("dataset", "unknown_dataset"),
+            constrained_class_index=constrained_class_index,
+        )
         print(class_count)
 
         # Plot the results
@@ -139,7 +146,14 @@ for percent in constraints_percentage_list:
         params["constraints"] = N_K_val
         params["constraints_percent"] = constraints_percent
 
-        save_parameters(params, exp_name=exp_name, timestamp=base_timestamp, iteration_timestamp=iteration_timestamp)
+        save_parameters(
+            params,
+            exp_name=exp_name,
+            timestamp=base_timestamp,
+            iteration_timestamp=iteration_timestamp,
+            dataset=params.get("dataset", "unknown_dataset"),
+            constrained_class_index=constrained_class_index,
+        )
 
         F_val, dF_dN_K_p_val = calculate_F_and_derivative(N_K_val, N_K_p_val, b_val)
 
@@ -170,7 +184,15 @@ for percent in constraints_percentage_list:
 
         print("results:\n", results)
         # Save results to a file
-        save_parameters(results, exp_name, base_timestamp, iteration_timestamp, filename="results.json")
+        save_parameters(
+            results,
+            exp_name,
+            base_timestamp,
+            iteration_timestamp,
+            filename="results.json",
+            dataset=params.get("dataset", "unknown_dataset"),
+            constrained_class_index=constrained_class_index,
+        )
 
         # Check if constraints are met
         if F_val < 1e-5:
@@ -186,6 +208,6 @@ for percent in constraints_percentage_list:
         params["C_k"] = C
 
     print('Achieved constraints with', number_of_iterations, 'iterations')
-    process_results(base_dir=Path(f'savedModels1/{base_timestamp}'))
+    process_results(base_dir=Path(f'results/{params.get("dataset", "unknown_dataset")}/{constrained_class_index}/{base_timestamp}'))
 
-process_results(base_dir=Path(f'savedModels1/{base_timestamp}'))
+process_results(base_dir=Path(f'results/{params.get("dataset", "unknown_dataset")}/{constrained_class_index}/{base_timestamp}'))
