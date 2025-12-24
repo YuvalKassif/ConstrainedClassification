@@ -1,4 +1,5 @@
 import torch
+import os
 import torch.nn as nn
 import torch.optim as optim
 from utils import set_seed, get_model, evaluate_test_accuracy, plot_training_results, count_predictions_per_class, save_test_counts, save_parameters
@@ -16,10 +17,54 @@ from torch.utils.data import DataLoader
 seed = 42
 set_seed(seed)
 
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+# Select GPU device: prefer configured index (default 1), fallback to cuda:0/cpu
+gpu_env = os.environ.get('GPU_INDEX')
+gpu_index = None
+try:
+    gpu_index = int(gpu_env) if gpu_env is not None else None
+except Exception:
+    gpu_index = None
+
+# Allow config override after params load; for now default to 1 here and reconcile below
+preferred_gpu = 1 if gpu_index is None else gpu_index
+if torch.cuda.is_available():
+    try:
+        torch.cuda.set_device(preferred_gpu)
+        device = torch.device(f'cuda:{preferred_gpu}')
+        try: #
+            name = torch.cuda.get_device_name(device)
+            print(f"[DEBUG] Using CUDA device cuda:{preferred_gpu} ({name})")
+        except Exception:
+            print(f"[DEBUG] Using CUDA device cuda:{preferred_gpu}")
+    except Exception as e:
+        print(f"[WARN] Could not set CUDA device to {preferred_gpu}: {e}. Falling back to cuda:0 if available.")
+        device = torch.device('cuda')
+else:
+    device = torch.device('cpu')
+    print("[DEBUG] CUDA not available; using CPU.")
 
 # Get experiment configuration
 params, exp_name = get_experiment_config()
+
+# Reconcile device selection with config after params load
+if torch.cuda.is_available():
+    cfg_gpu = params.get('gpu_index', preferred_gpu)
+    try:
+        cfg_gpu = int(cfg_gpu)
+    except Exception:
+        cfg_gpu = preferred_gpu
+    if cfg_gpu != preferred_gpu:
+        try:
+            torch.cuda.set_device(cfg_gpu)
+            device = torch.device(f'cuda:{cfg_gpu}')
+            try:
+                name = torch.cuda.get_device_name(device)
+                print(f"[DEBUG] Switched to CUDA device cuda:{cfg_gpu} ({name}) from cuda:{preferred_gpu}")
+            except Exception:
+                print(f"[DEBUG] Switched to CUDA device cuda:{cfg_gpu} from cuda:{preferred_gpu}")
+            preferred_gpu = cfg_gpu
+        except Exception as e:
+            print(f"[WARN] Failed to switch to CUDA device cuda:{cfg_gpu}: {e}. Keeping cuda:{preferred_gpu}.")
 
 # Build dataloaders based on dataset selection
 train_loader, val_loader, test_loader, data_meta = get_dataloaders(params)
