@@ -3,6 +3,8 @@ import json
 from pathlib import Path
 from datetime import datetime
 import copy
+import os
+import subprocess
 
 import torch
 import torch.optim as optim
@@ -23,6 +25,101 @@ from update_weights import calculate_F_and_derivative
 from optimization import constrained_classification
 from optimization_analysis import process_results
 
+
+def _select_smart_device():
+    """Select the most 'free' CUDA device when available.
+
+    Priority:
+    1) Respect `GPU_INDEX` env var if set and valid.
+    2) Use `nvidia-smi` to pick GPU with lowest utilization, then most free mem.
+    3) Fallback to largest free memory via torch API if available.
+    4) Fallback to default CUDA or CPU.
+    """
+    # If CUDA not available, use CPU
+    if not torch.cuda.is_available():
+        return torch.device('cpu')
+
+    # 1) Allow explicit override via env var
+    gpu_env = os.environ.get('GPU_INDEX')
+    if gpu_env is not None:
+        try:
+            idx = int(gpu_env)
+            torch.cuda.set_device(idx)
+            print(f"[INFO] Using GPU from GPU_INDEX env: cuda:{idx}")
+            return torch.device(f'cuda:{idx}')
+        except Exception as e:
+            print(f"[WARN] Invalid GPU_INDEX='{gpu_env}': {e}. Ignoring.")
+
+    # 2) Try to query via nvidia-smi
+    try:
+        output = subprocess.check_output(
+            [
+                'nvidia-smi',
+                '--query-gpu=index,memory.free,memory.total,utilization.gpu',
+                '--format=csv,noheader,nounits',
+            ],
+            encoding='utf-8',
+            stderr=subprocess.STDOUT,
+        )
+        rows = []
+        for line in output.strip().splitlines():
+            parts = [p.strip() for p in line.split(',')]
+            if len(parts) < 4:
+                continue
+            idx, mem_free, mem_total, util = int(parts[0]), int(parts[1]), int(parts[2]), int(parts[3])
+            rows.append({'idx': idx, 'free': mem_free, 'total': mem_total, 'util': util})
+
+        # Respect CUDA_VISIBLE_DEVICES if set
+        visible = os.environ.get('CUDA_VISIBLE_DEVICES')
+        allowed = None
+        if visible:
+            try:
+                allowed = [int(t.strip()) for t in visible.split(',') if t.strip() != '']
+                rows = [r for r in rows if r['idx'] in allowed]
+            except Exception:
+                # If parsing fails, keep rows as is
+                allowed = None
+
+        if rows:
+            # Prefer lowest utilization, then highest free memory
+            rows.sort(key=lambda r: (r['util'], -r['free']))
+            best_physical = rows[0]['idx']
+            # Map to logical index when CUDA_VISIBLE_DEVICES is set
+            if allowed is not None and best_physical in allowed:
+                best_logical = allowed.index(best_physical)
+            else:
+                best_logical = best_physical
+            torch.cuda.set_device(best_logical)
+            try:
+                name = torch.cuda.get_device_name(best_logical)
+                print(f"[INFO] Auto-selected GPU cuda:{best_logical} ({name}) via nvidia-smi")
+            except Exception:
+                print(f"[INFO] Auto-selected GPU cuda:{best_logical} via nvidia-smi")
+            return torch.device(f'cuda:{best_logical}')
+    except Exception as e:
+        # nvidia-smi not found or failed; continue to fallback
+        print(f"[WARN] nvidia-smi query failed: {e}. Falling back to torch API.")
+
+    # 3) Fallback: pick device with largest free memory via torch (if supported)
+    try:
+        best_idx, best_free = 0, -1
+        for i in range(torch.cuda.device_count()):
+            try:
+                with torch.cuda.device(i):
+                    # mem_get_info returns (free, total)
+                    free, total = torch.cuda.mem_get_info()  # type: ignore[attr-defined]
+                if free > best_free:
+                    best_idx, best_free = i, free
+            except Exception:
+                # If mem_get_info not available for this device, skip
+                pass
+        torch.cuda.set_device(best_idx)
+        print(f"[INFO] Auto-selected GPU cuda:{best_idx} via torch CUDA API")
+        return torch.device(f'cuda:{best_idx}')
+    except Exception:
+        # 4) Final fallback: default CUDA device
+        print("[INFO] Falling back to default CUDA device")
+        return torch.device('cuda')
 
 def compute_test_counts(loader, num_classes):
     label_counts = {}
@@ -275,8 +372,8 @@ def main():
     num_classes = meta.get('num_classes') or 4
     params["num_classes"] = num_classes
 
-    # Device selection (mirror main.py behavior simply)
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    # Smart device selection: choose the most 'free' GPU when possible
+    device = _select_smart_device()
 
     # Single base timestamp to group this entire full run
     base_timestamp = datetime.now().strftime("%m-%d/experiment_files/%H-%M")
