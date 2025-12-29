@@ -364,7 +364,12 @@ def main():
         params["dataset"] = args.dataset
         # Align model choice with dataset override
         ds = params["dataset"].lower()
-        if ds in ('medmnist_oct', 'medmnist_tissue', 'tissuemnist', 'tissue'):
+        if ds in (
+            'medmnist_oct',
+            'medmnist_tissue', 'tissuemnist', 'tissue',
+            'medmnist_organ_c', 'organ_cmnist', 'organcmnist', 'organ_c',
+            'medmnist_organ_s', 'organ_smnist', 'organsmnist', 'organ_s'
+        ):
             # Grayscale MedMNIST datasets → 1-channel SimpleCNN
             params["model_choice"] = 'medmnist'
         else:

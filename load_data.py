@@ -8,7 +8,7 @@ import torch
 from torch.utils.data import DataLoader, Subset
 from torch.utils.data.sampler import WeightedRandomSampler
 from torchvision import datasets, transforms
-from medmnist import OCTMNIST, BloodMNIST, DermaMNIST, TissueMNIST, OrganCMNIST
+from medmnist import OCTMNIST, BloodMNIST, DermaMNIST, TissueMNIST, OrganCMNIST, OrganSMNIST
 
 from utils import set_seed
 
@@ -348,6 +348,36 @@ def load_medmnist_organc(batch_size: int = 32, seed: int = 42):
     return train_loader, val_loader, test_loader, meta
 
 
+def load_medmnist_organs(batch_size: int = 32, seed: int = 42):
+    """Load MedMNIST OrganSMNIST (grayscale, 11 classes)."""
+    set_seed(seed)
+
+    transform = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.5], std=[0.5])
+    ])
+
+    target_tf = transforms.Lambda(_flatten_target)
+
+    train_dataset = OrganSMNIST(split='train', transform=transform, target_transform=target_tf, download=False)
+    val_dataset = OrganSMNIST(split='val', transform=transform, target_transform=target_tf, download=False)
+    test_dataset = OrganSMNIST(split='test', transform=transform, target_transform=target_tf, download=False)
+
+    worker_init = _make_worker_init_fn(seed)
+    g = torch.Generator(); g.manual_seed(seed)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=4, worker_init_fn=worker_init, generator=g)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=4, worker_init_fn=worker_init, generator=g)
+    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=4, worker_init_fn=worker_init, generator=g)
+
+    meta = {
+        'num_classes': 11,
+        'class_names': [str(i) for i in range(11)],
+        'channels': 1,
+        'image_size': 28
+    }
+    return train_loader, val_loader, test_loader, meta
+
+
 def get_dataloaders(params) -> Tuple[DataLoader, DataLoader, DataLoader, Dict[str, Any]]:
     dataset = params.get('dataset', 'medmnist_oct')
     batch_size = params.get('batch_size', 32)
@@ -364,6 +394,8 @@ def get_dataloaders(params) -> Tuple[DataLoader, DataLoader, DataLoader, Dict[st
         return load_medmnist_tissue(batch_size=batch_size, seed=seed)
     elif dataset in ('medmnist_organ_c', 'organ_cmnist', 'organcmnist', 'organ_c'):
         return load_medmnist_organc(batch_size=batch_size, seed=seed)
+    elif dataset in ('medmnist_organ_s', 'organ_smnist', 'organsmnist', 'organ_s'):
+        return load_medmnist_organs(batch_size=batch_size, seed=seed)
     elif dataset == 'kneeKL224':
         root = params.get('data_dir_knee')
         if not root:
@@ -385,7 +417,7 @@ def get_dataloaders(params) -> Tuple[DataLoader, DataLoader, DataLoader, Dict[st
         return loaders
     else:
         raise ValueError(
-            f"Unsupported dataset '{dataset}'. Choose from 'kneeKL224', 'medmnist_oct', 'medmnist_blood', 'medmnist_derma', 'medmnist_tissue', 'medmnist_organ_c', 'lc25000'."
+            f"Unsupported dataset '{dataset}'. Choose from 'kneeKL224', 'medmnist_oct', 'medmnist_blood', 'medmnist_derma', 'medmnist_tissue', 'medmnist_organ_c', 'medmnist_organ_s', 'lc25000'."
         )
 
 
