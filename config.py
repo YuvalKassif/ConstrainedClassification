@@ -5,8 +5,9 @@ def get_experiment_config(iteration=0, num_iterations=None):
     exp_name = generate_exp_name()
 
     # Choose one of: 'kneeKL224', 'medmnist_oct', 'medmnist_blood' (alias: 'bloodmnist'),
-    # 'medmnist_derma' (aliases: 'dermamnist', 'derma'), 'lc25000'
-    dataset = 'medmnist_blood'
+    # 'medmnist_derma' (aliases: 'dermamnist', 'derma'), 'medmnist_tissue' (aliases: 'tissuemnist', 'tissue'),
+    # 'medmnist_organ_c' (aliases: 'organ_cmnist', 'organcmnist', 'organ_c'), 'lc25000'
+    dataset = 'medmnist_organ_c'
 
     params = {
         "exp_name": exp_name,
@@ -34,10 +35,10 @@ def get_experiment_config(iteration=0, num_iterations=None):
         # Model choice: 'medmnist' (SimpleCNN) or any of
         # 'EfficientNetB0', 'EfficientNetB5', 'ResNet50', 'ResNet101'
         # Defaults:
-        # - medmnist_oct -> 'medmnist' (1-channel SimpleCNN)
-        # - medmnist_blood -> 'ResNet50' (RGB). SimpleCNN expects 1 channel.
-        # - imagefolder datasets -> 'ResNet50'
-        "model_choice": ("medmnist" if dataset == 'medmnist_oct' else "EfficientNetB5"),
+        # - medmnist_oct, medmnist_tissue, medmnist_organ_c -> 'medmnist' (1-channel SimpleCNN)
+        # - medmnist_blood/derma -> EfficientNet/ResNet (RGB)
+        # - imagefolder datasets -> EfficientNet/ResNet
+        "model_choice": ("medmnist" if dataset in ('medmnist_oct', 'medmnist_tissue', 'tissuemnist', 'tissue', 'medmnist_organ_c', 'organ_cmnist', 'organcmnist', 'organ_c') else "EfficientNetB5"),
 
         # Constraints configuration (index validated dynamically against num_classes)
         "constrained_class_index": 2,

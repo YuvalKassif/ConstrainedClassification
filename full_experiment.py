@@ -350,21 +350,25 @@ def main():
     parser.add_argument("--lr-grid", type=float, nargs="+", default=[1e-3, 1e-4, 5e-5], help="Learning rate grid")
     parser.add_argument("--epoch-grid", type=int, nargs="+", default=[30, 50, 75], help="Epoch grid")
     parser.add_argument("--constraints", type=int, nargs="+", default=[90, 70, 50, 30], help="Constraint percentages")
+    parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility")
     args = parser.parse_args()
 
-    seed = 42
+    # Global seeding for reproducibility
+    seed = int(args.seed)
     set_seed(seed)
 
     params, exp_name = get_experiment_config()
+    # Pass seed to dataloaders via params for consistent worker seeding
+    params["seed"] = seed
     if args.dataset is not None:
         params["dataset"] = args.dataset
         # Align model choice with dataset override
         ds = params["dataset"].lower()
-        if ds == 'medmnist_oct':
+        if ds in ('medmnist_oct', 'medmnist_tissue', 'tissuemnist', 'tissue'):
+            # Grayscale MedMNIST datasets → 1-channel SimpleCNN
             params["model_choice"] = 'medmnist'
         else:
             # Use a 3-channel model for RGB datasets
-            # Keep consistent with config default for non-OCT
             params["model_choice"] = 'EfficientNetB5'
 
     # Build dataloaders and capture num_classes
