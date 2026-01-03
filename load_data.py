@@ -8,6 +8,8 @@ import torch
 from torch.utils.data import DataLoader, Subset
 from torch.utils.data.sampler import WeightedRandomSampler
 from torchvision import datasets, transforms
+from PIL import Image
+import pandas as pd
 from medmnist import OCTMNIST, BloodMNIST, DermaMNIST, TissueMNIST, OrganCMNIST, OrganSMNIST
 
 from utils import set_seed
@@ -194,6 +196,25 @@ def load_imagefolder(root: str, batch_size: int, image_size: int = 224, channels
         'image_size': image_size
     }
     return train_loader, val_loader, test_loader, meta
+
+
+class _PathsDataset(torch.utils.data.Dataset):
+    def __init__(self, paths: List[str], targets: List[int], transform=None):
+        self.paths = paths
+        self.targets = targets
+        self.transform = transform
+
+    def __len__(self):
+        return len(self.paths)
+
+    def __getitem__(self, idx):
+        p = self.paths[idx]
+        y = int(self.targets[idx])
+        with Image.open(p) as img:
+            img = img.convert('RGB')
+            if self.transform is not None:
+                img = self.transform(img)
+        return img, y
 
 
 def load_medmnist_oct(batch_size: int = 32, seed: int = 42):
@@ -415,9 +436,14 @@ def get_dataloaders(params) -> Tuple[DataLoader, DataLoader, DataLoader, Dict[st
         except Exception as e:
             print(f"[DEBUG] LC25000 meta extraction failed: {e}")
         return loaders
+    elif dataset in ('ham10000', 'ham', 'isic_ham'): 
+        root = params.get('data_dir_ham10000') or params.get('data_dir_ham')
+        if not root:
+            raise ValueError("'data_dir_ham10000' must be set in params for HAM10000 dataset.")
+        return load_ham10000(root=root, batch_size=batch_size, image_size=224, seed=seed)
     else:
         raise ValueError(
-            f"Unsupported dataset '{dataset}'. Choose from 'kneeKL224', 'medmnist_oct', 'medmnist_blood', 'medmnist_derma', 'medmnist_tissue', 'medmnist_organ_c', 'medmnist_organ_s', 'lc25000'."
+            f"Unsupported dataset '{dataset}'. Choose from 'kneeKL224', 'medmnist_oct', 'medmnist_blood', 'medmnist_derma', 'medmnist_tissue', 'medmnist_organ_c', 'medmnist_organ_s', 'lc25000', 'ham10000'."
         )
 
 
@@ -486,5 +512,126 @@ def load_lc25000(root: str, batch_size: int, image_size: int = 224, seed: int = 
         'class_names': class_names,
         'channels': 3,
         'image_size': image_size
+    }
+    return train_loader, val_loader, test_loader, meta
+
+
+def _find_ham_paths(root: str) -> Dict[str, str]:
+    """Map image_id -> absolute path to .jpg for HAM10000 across part folders.
+
+    Looks under typical folders: 'HAM10000_images_part_1' and 'HAM10000_images_part_2'.
+    If not found, searches recursively under root for 'ISIC_*.jpg'.
+    """
+    candidates = []
+    for d in ['HAM10000_images_part_1', 'HAM10000_images_part_2']:
+        p = os.path.join(root, d)
+        if os.path.isdir(p):
+            candidates.append(p)
+    id_to_path: Dict[str, str] = {}
+    if candidates:
+        for base in candidates:
+            try:
+                for name in os.listdir(base):
+                    if not name.lower().endswith('.jpg'):
+                        continue
+                    if not name.startswith('ISIC_'):
+                        continue
+                    img_id = os.path.splitext(name)[0]
+                    id_to_path[img_id] = os.path.join(base, name)
+            except Exception:
+                pass
+    else:
+        # Fallback: walk and find ISIC_*.jpg
+        for dirpath, _, filenames in os.walk(root):
+            for name in filenames:
+                if name.lower().endswith('.jpg') and name.startswith('ISIC_'):
+                    img_id = os.path.splitext(name)[0]
+                    id_to_path[img_id] = os.path.join(dirpath, name)
+    return id_to_path
+
+
+def _read_ham_metadata(root: str) -> pd.DataFrame:
+    """Read HAM10000 metadata CSV into a DataFrame.
+
+    Accepts files named 'HAM10000_metadata' or 'HAM10000_metadata.csv'.
+    """
+    for name in ['HAM10000_metadata', 'HAM10000_metadata.csv']:
+        p = os.path.join(root, name)
+        if os.path.isfile(p):
+            return pd.read_csv(p)
+    # Try any CSV with 'metadata' in name
+    try:
+        for fn in os.listdir(root):
+            if 'meta' in fn.lower() and fn.lower().endswith('.csv'):
+                return pd.read_csv(os.path.join(root, fn))
+    except Exception:
+        pass
+    raise FileNotFoundError("HAM10000 metadata CSV not found under root.")
+
+
+def load_ham10000(root: str, batch_size: int, image_size: int = 224, seed: int = 42):
+    """Load HAM10000 dataset using metadata CSV for labels.
+
+    - Expects images in 'HAM10000_images_part_1' and 'HAM10000_images_part_2' under root
+      (if part_2 not extracted, continues with part_1).
+    - Expects metadata file 'HAM10000_metadata' (CSV text) in root.
+    - Builds stratified train/val/test splits (70/15/15).
+    """
+    set_seed(seed)
+
+    # Build id -> path mapping
+    id_to_path = _find_ham_paths(root)
+    if not id_to_path:
+        print(f"[WARN] No images found under '{root}'. Ensure images are extracted.")
+
+    # Read metadata
+    df = _read_ham_metadata(root)
+    if 'image_id' not in df.columns or 'dx' not in df.columns:
+        raise ValueError("HAM10000 metadata must contain 'image_id' and 'dx' columns.")
+
+    # Known label order for reproducibility
+    known_classes = ['akiec', 'bcc', 'bkl', 'df', 'mel', 'nv', 'vasc']
+
+    # Filter to rows with existing files
+    paths: List[str] = []
+    labels: List[int] = []
+    missing = 0
+    for _, row in df.iterrows():
+        img_id = str(row['image_id'])
+        dx = str(row['dx']).lower()
+        p = id_to_path.get(img_id)
+        if p and os.path.isfile(p) and dx in known_classes:
+            paths.append(p)
+            labels.append(known_classes.index(dx))
+        else:
+            missing += 1
+    if missing:
+        print(f"[INFO] HAM10000: skipped {missing} rows (missing file or unknown label)")
+    if not paths:
+        raise RuntimeError("HAM10000: no valid image paths after filtering. Check extraction paths and metadata.")
+
+    # Transforms for RGB images
+    tfs = _transforms_for(image_size=image_size, channels=3, mean=[0.66133188]*3, std=[0.21229856]*3)
+
+    # Stratified split
+    idx_train, idx_val, idx_test = _stratified_indices(labels, splits=(0.7, 0.15, 0.15), seed=seed)
+
+    train_ds = _PathsDataset([paths[i] for i in idx_train], [labels[i] for i in idx_train], transform=tfs['train'])
+    val_ds = _PathsDataset([paths[i] for i in idx_val], [labels[i] for i in idx_val], transform=tfs['val'])
+    test_ds = _PathsDataset([paths[i] for i in idx_test], [labels[i] for i in idx_test], transform=tfs['test'])
+
+    num_workers = 4
+    worker_init = _make_worker_init_fn(seed)
+    g = torch.Generator(); g.manual_seed(seed)
+
+    train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=num_workers, worker_init_fn=worker_init, generator=g)
+    val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False, num_workers=num_workers, worker_init_fn=worker_init, generator=g)
+    test_loader = DataLoader(test_ds, batch_size=batch_size, shuffle=False, num_workers=num_workers, worker_init_fn=worker_init, generator=g)
+
+    meta = {
+        'num_classes': len(known_classes),
+        'class_names': known_classes,
+        'channels': 3,
+        'image_size': image_size,
     }
     return train_loader, val_loader, test_loader, meta

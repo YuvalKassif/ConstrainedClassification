@@ -7,8 +7,9 @@ def get_experiment_config(iteration=0, num_iterations=None):
     # Choose one of: 'kneeKL224', 'medmnist_oct', 'medmnist_blood' (alias: 'bloodmnist'),
     # 'medmnist_derma' (aliases: 'dermamnist', 'derma'), 'medmnist_tissue' (aliases: 'tissuemnist', 'tissue'),
     # 'medmnist_organ_c' (aliases: 'organ_cmnist', 'organcmnist', 'organ_c'),
-    # 'medmnist_organ_s' (aliases: 'organ_smnist', 'organsmnist', 'organ_s'), 'lc25000'
-    dataset = 'medmnist_organ_s'
+    # 'medmnist_organ_s' (aliases: 'organ_smnist', 'organsmnist', 'organ_s'), 'lc25000',
+    # 'ham10000' (aliases: 'ham', 'isic_ham')
+    dataset = 'ham10000'
 
     params = {
         "exp_name": exp_name,
@@ -19,6 +20,7 @@ def get_experiment_config(iteration=0, num_iterations=None):
         # Update these paths as needed in your environment
         "data_dir_knee": '/home/dsi/kassify/Research2019/ordinal_dnn/yuval/kneeKL224',
         "data_dir_lc25000": '/home/dsi/kassify/RetinalDataSet/lc25000',
+        "data_dir_ham10000": '/home/dsi/kassify/Research2019/datasets/HAM10000',  # Set to the folder containing HAM10000 images/metadata
 
         # Optimization and training hyperparameters
         "C_k": None,  # Will be set dynamically based on num_classes
