@@ -441,9 +441,16 @@ def get_dataloaders(params) -> Tuple[DataLoader, DataLoader, DataLoader, Dict[st
         if not root:
             raise ValueError("'data_dir_ham10000' must be set in params for HAM10000 dataset.")
         return load_ham10000(root=root, batch_size=batch_size, image_size=224, seed=seed)
+    elif dataset in ('breakhis', 'breakhis', 'brea_khis', 'breast_histology_breakhis'):
+        root = params.get('data_dir_breakhis') or params.get('data_dir_breast_histology')
+        if not root:
+            raise ValueError("'data_dir_breakhis' must be set in params for BreaKHis dataset.")
+        gran = params.get('breakhis_granularity', 'binary')  # 'binary' or 'subtype'
+        mags = params.get('breakhis_magnifications')  # e.g., [40,100,200,400] or None for all
+        return load_breakhis(root=root, batch_size=batch_size, image_size=224, seed=seed, granularity=gran, magnifications=mags)
     else:
         raise ValueError(
-            f"Unsupported dataset '{dataset}'. Choose from 'kneeKL224', 'medmnist_oct', 'medmnist_blood', 'medmnist_derma', 'medmnist_tissue', 'medmnist_organ_c', 'medmnist_organ_s', 'lc25000', 'ham10000'."
+            f"Unsupported dataset '{dataset}'. Choose from 'kneeKL224', 'medmnist_oct', 'medmnist_blood', 'medmnist_derma', 'medmnist_tissue', 'medmnist_organ_c', 'medmnist_organ_s', 'lc25000', 'ham10000', 'breakhis'."
         )
 
 
@@ -631,6 +638,132 @@ def load_ham10000(root: str, batch_size: int, image_size: int = 224, seed: int =
     meta = {
         'num_classes': len(known_classes),
         'class_names': known_classes,
+        'channels': 3,
+        'image_size': image_size,
+    }
+    return train_loader, val_loader, test_loader, meta
+
+
+def _resolve_breakhis_breast_root(root: str) -> str:
+    """Return path to the 'breast' directory that contains 'benign'/'malignant'."""
+    candidates = []
+    # Direct given root may be the 'breast' folder
+    if os.path.isdir(os.path.join(root, 'benign')) and os.path.isdir(os.path.join(root, 'malignant')):
+        return root
+    # Try common nested layout
+    p = os.path.join(root, 'BreaKHis_v1', 'histology_slides', 'breast')
+    if os.path.isdir(p):
+        return p
+    p2 = os.path.join(root, 'histology_slides', 'breast')
+    if os.path.isdir(p2):
+        return p2
+    # Walk to find a folder that has benign/malignant
+    for dirpath, dirnames, _ in os.walk(root):
+        if 'benign' in dirnames and 'malignant' in dirnames:
+            return os.path.join(dirpath)
+    raise FileNotFoundError("Could not locate 'breast' folder with 'benign' and 'malignant' under provided root.")
+
+
+def _collect_breakhis_paths(breast_root: str, granularity: str = 'binary', magnifications: List[int] = None):
+    """Collect (path,label) pairs from BreaKHis.
+
+    granularity: 'binary' (benign/malignant) or 'subtype' (8 subclasses).
+    magnifications: list of integers from {40, 100, 200, 400}; if None, use all.
+    """
+    subtype_map_benign = ['adenosis', 'fibroadenoma', 'phyllodes_tumor', 'tubular_adenoma']
+    subtype_map_malig = ['ductal_carcinoma', 'lobular_carcinoma', 'mucinous_carcinoma', 'papillary_carcinoma']
+    subtype_order = subtype_map_benign + subtype_map_malig
+
+    if magnifications is not None:
+        mags_set = set(str(m) + 'X' for m in magnifications)
+    else:
+        mags_set = None  # accept all
+
+    paths: List[str] = []
+    labels: List[int] = []
+
+    for coarse in ['benign', 'malignant']:
+        coarse_dir = os.path.join(breast_root, coarse, 'SOB')
+        if not os.path.isdir(coarse_dir):
+            # Some dumps may omit 'SOB' level; fallback to coarse_dir directly
+            coarse_dir = os.path.join(breast_root, coarse)
+        if not os.path.isdir(coarse_dir):
+            continue
+        # Subtypes under coarse
+        for subtype in (subtype_map_benign if coarse == 'benign' else subtype_map_malig):
+            subtype_dir = os.path.join(coarse_dir, subtype)
+            if not os.path.isdir(subtype_dir):
+                # Some packs have patient dirs directly under coarse_dir; keep walking
+                subtype_dir = coarse_dir
+                subtype_iter = [subtype]  # still use this subtype label
+            else:
+                subtype_iter = [subtype]
+            for sub in subtype_iter:
+                # Walk patient folders
+                target_dir = os.path.join(coarse_dir, sub)
+                if not os.path.isdir(target_dir):
+                    continue
+                for patient_dir in os.listdir(target_dir):
+                    pdir = os.path.join(target_dir, patient_dir)
+                    if not os.path.isdir(pdir):
+                        continue
+                    # Magnification level folders like '40X','100X','200X','400X'
+                    for mag_dir in os.listdir(pdir):
+                        mdir = os.path.join(pdir, mag_dir)
+                        if not os.path.isdir(mdir):
+                            continue
+                        if mags_set is not None and mag_dir not in mags_set:
+                            continue
+                        # Images are PNGs
+                        for fname in os.listdir(mdir):
+                            if not fname.lower().endswith(('.png', '.jpg', '.jpeg', '.tif', '.tiff')):
+                                continue
+                            fpath = os.path.join(mdir, fname)
+                            if granularity == 'binary':
+                                y = 0 if coarse == 'benign' else 1
+                            else:
+                                # subtype index within ordered list
+                                y = subtype_order.index(sub)
+                            paths.append(fpath)
+                            labels.append(y)
+
+    # Class names
+    if granularity == 'binary':
+        class_names = ['benign', 'malignant']
+    else:
+        class_names = subtype_order
+    return paths, labels, class_names
+
+
+def load_breakhis(root: str, batch_size: int, image_size: int = 224, seed: int = 42,
+                  granularity: str = 'binary', magnifications: List[int] = None):
+    set_seed(seed)
+    breast_root = _resolve_breakhis_breast_root(root)
+    paths, labels, class_names = _collect_breakhis_paths(breast_root, granularity=granularity, magnifications=magnifications)
+    if not paths:
+        raise RuntimeError("BreaKHis: no images collected. Check root path and structure.")
+
+    # Transforms for RGB
+    tfs = _transforms_for(image_size=image_size, channels=3, mean=[0.66133188]*3, std=[0.21229856]*3)
+
+    # Stratified split
+    idx_train, idx_val, idx_test = _stratified_indices(labels, splits=(0.7, 0.15, 0.15), seed=seed)
+
+    train_ds = _PathsDataset([paths[i] for i in idx_train], [labels[i] for i in idx_train], transform=tfs['train'])
+    val_ds = _PathsDataset([paths[i] for i in idx_val], [labels[i] for i in idx_val], transform=tfs['val'])
+    test_ds = _PathsDataset([paths[i] for i in idx_test], [labels[i] for i in idx_test], transform=tfs['test'])
+
+    num_workers = 4
+    worker_init = _make_worker_init_fn(seed)
+    g = torch.Generator(); g.manual_seed(seed)
+
+    train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=num_workers, worker_init_fn=worker_init, generator=g)
+    val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False, num_workers=num_workers, worker_init_fn=worker_init, generator=g)
+    test_loader = DataLoader(test_ds, batch_size=batch_size, shuffle=False, num_workers=num_workers, worker_init_fn=worker_init, generator=g)
+
+    meta = {
+        'num_classes': len(class_names),
+        'class_names': class_names,
         'channels': 3,
         'image_size': image_size,
     }

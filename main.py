@@ -18,7 +18,7 @@ seed = 42
 set_seed(seed)
 
 # Select GPU device: prefer configured index (default 1), fallback to cuda:0/cpu
-gpu_env = os.environ.get('GPU_INDEX')
+gpu_env = 3 #os.environ.get('GPU_INDEX')
 gpu_index = None
 try:
     gpu_index = int(gpu_env) if gpu_env is not None else None
@@ -26,7 +26,7 @@ except Exception:
     gpu_index = None
 
 # Allow config override after params load; for now default to 1 here and reconcile below
-preferred_gpu = 1 if gpu_index is None else gpu_index
+preferred_gpu = 3 if gpu_index is None else gpu_index
 if torch.cuda.is_available():
     try:
         torch.cuda.set_device(preferred_gpu)
@@ -45,6 +45,15 @@ else:
 
 # Get experiment configuration
 params, exp_name = get_experiment_config()
+
+# Optional: disable cuDNN if requested (workaround for rare internal errors)
+try:
+    if bool(params.get('disable_cudnn', False)):
+        import torch.backends.cudnn as cudnn
+        cudnn.enabled = False
+        print("[INFO] Disabled cuDNN per config to avoid backend errors.")
+except Exception as _e:
+    print(f"[WARN] Failed to toggle cuDNN: {_e}")
 
 # Reconcile device selection with config after params load
 if torch.cuda.is_available():

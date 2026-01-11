@@ -8,8 +8,8 @@ def get_experiment_config(iteration=0, num_iterations=None):
     # 'medmnist_derma' (aliases: 'dermamnist', 'derma'), 'medmnist_tissue' (aliases: 'tissuemnist', 'tissue'),
     # 'medmnist_organ_c' (aliases: 'organ_cmnist', 'organcmnist', 'organ_c'),
     # 'medmnist_organ_s' (aliases: 'organ_smnist', 'organsmnist', 'organ_s'), 'lc25000',
-    # 'ham10000' (aliases: 'ham', 'isic_ham')
-    dataset = 'ham10000'
+    # 'ham10000' (aliases: 'ham', 'isic_ham'), 'breakhis' (breast histology)
+    dataset = 'medmnist_derma'
 
     params = {
         "exp_name": exp_name,
@@ -21,6 +21,14 @@ def get_experiment_config(iteration=0, num_iterations=None):
         "data_dir_knee": '/home/dsi/kassify/Research2019/ordinal_dnn/yuval/kneeKL224',
         "data_dir_lc25000": '/home/dsi/kassify/RetinalDataSet/lc25000',
         "data_dir_ham10000": '/home/dsi/kassify/Research2019/datasets/HAM10000',  # Set to the folder containing HAM10000 images/metadata
+        "data_dir_breakhis": None,  # Set to the BreaKHis dataset root
+
+        # Optional backend controls
+        "disable_cudnn": True,  # Set True to work around rare cuDNN internal errors
+        "data_dir_breakhis": '/home/dsi/kassify/Research2019/datasets/BreaKHis',  # Set to the BreaKHis dataset root
+        # Optional BreaKHis controls
+        "breakhis_granularity": 'subtype',  # 'binary' or 'subtype'
+        "breakhis_magnifications": None,   # e.g., [40, 100, 200, 400] or None for all
 
         # Optimization and training hyperparameters
         "C_k": None,  # Will be set dynamically based on num_classes
@@ -32,7 +40,7 @@ def get_experiment_config(iteration=0, num_iterations=None):
         "num_iterations": num_iterations,
         "num_iteration": iteration,
         "weight_decay": 1e-4,
-        "batch_size": 32,
+        "batch_size": 16,
         "epochs": 75,
 
         # Model choice: 'medmnist' (SimpleCNN) or any of

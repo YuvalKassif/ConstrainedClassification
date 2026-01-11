@@ -360,6 +360,14 @@ def main():
     params, exp_name = get_experiment_config()
     # Pass seed to dataloaders via params for consistent worker seeding
     params["seed"] = seed
+    # Optional backend toggle: disable cuDNN if configured
+    try:
+        if bool(params.get('disable_cudnn', False)):
+            import torch.backends.cudnn as cudnn
+            cudnn.enabled = False
+            print("[INFO] Disabled cuDNN per config to avoid backend errors.")
+    except Exception as _e:
+        print(f"[WARN] Failed to toggle cuDNN: {_e}")
     if args.dataset is not None:
         params["dataset"] = args.dataset
         # Align model choice with dataset override
