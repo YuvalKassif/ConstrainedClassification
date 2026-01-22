@@ -46,15 +46,6 @@ else:
 # Get experiment configuration
 params, exp_name = get_experiment_config()
 
-# Optional: disable cuDNN if requested (workaround for rare internal errors)
-try:
-    if bool(params.get('disable_cudnn', False)):
-        import torch.backends.cudnn as cudnn
-        cudnn.enabled = False
-        print("[INFO] Disabled cuDNN per config to avoid backend errors.")
-except Exception as _e:
-    print(f"[WARN] Failed to toggle cuDNN: {_e}")
-
 # Reconcile device selection with config after params load
 if torch.cuda.is_available():
     cfg_gpu = params.get('gpu_index', preferred_gpu)

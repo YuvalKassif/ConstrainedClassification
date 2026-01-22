@@ -117,3 +117,33 @@ class SpoPlusLoss(nn.Module):
         return loss.sum(dim=1).mean()
 
 
+class LagrangianConstraintLoss(nn.Module):
+    """Cross-entropy with a quadratic penalty on constrained-class count."""
+
+    def __init__(self, constrained_class_index, constraint_ratio, num_classes, lam=1.0, device="cpu"):
+        super().__init__()
+        self.constrained_class_index = int(constrained_class_index)
+        self.constraint_ratio = float(constraint_ratio)
+        self.num_classes = int(num_classes)
+        self.lam = float(lam)
+        self.device = device
+        # Keep attributes used by existing training loop; Lagrangian doesn't use them.
+        self.last_tanh_mean = None
+        self.C = torch.ones(self.num_classes, device=self.device)
+
+    def forward(self, y_pred, y_true):
+        if y_true.dim() > 1:
+            y_true = y_true.squeeze()
+        y_true = y_true.to(self.device)
+
+        ce = F.cross_entropy(y_pred, y_true)
+
+        probs = F.softmax(y_pred, dim=1)
+        batch_size = probs.shape[0]
+        expected_k = probs[:, self.constrained_class_index].sum()
+        target_k = self.constraint_ratio * float(batch_size)
+        penalty = (expected_k - target_k) ** 2
+
+        return ce + self.lam * penalty
+
+

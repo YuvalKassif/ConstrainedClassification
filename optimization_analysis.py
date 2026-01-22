@@ -93,21 +93,23 @@ def plot_and_save_graphs1(results_data, save_path):
 
 def plot_and_save_graphs(results_data, save_path):
     metrics = ['accuracy', 'precision', 'recall', 'f1']
-    types = ['macro', 'weighted']  # Metric types for precision, recall, and f1
-    colors = {'macro': 'blue', 'weighted': 'red'}
+    variant_defs = [
+        ("PTO", "PTO_results", "blue"),
+        ("PTO_LP", "PTO_LP_results", "green"),
+        ("PAO", "PAO_results", "red"),
+        ("PAO_LP", "PAO_LP_results", "orange"),
+    ]
+
+    if not results_data:
+        return
+
+    available_variants = []
+    for label, key, color in variant_defs:
+        if all(key in data for data in results_data):
+            available_variants.append((label, key, color))
 
     for metric in metrics:
         fig, ax = plt.subplots(figsize=(12, 6))
-
-        # Separate handling for accuracy (not nested in macro/weighted)
-        if metric == 'accuracy':
-            pto_values = [data["PTO_results"]["accuracy"] for data in results_data]
-            pao_values = [data["PAO_results"]["accuracy"] for data in results_data]
-        else:
-            macro_values_pto = [data["PTO_results"]["macro"][metric] for data in results_data]
-            weighted_values_pto = [data["PTO_results"]["weighted"][metric] for data in results_data]
-            macro_values_pao = [data["PAO_results"]["macro"][metric] for data in results_data]
-            weighted_values_pao = [data["PAO_results"]["weighted"][metric] for data in results_data]
 
         n_k_values = [data["N_K"] for data in results_data]
         percent_values = [data["percent"] for data in results_data]
@@ -115,20 +117,30 @@ def plot_and_save_graphs(results_data, save_path):
 
         x = np.arange(len(results_data))  # Experiment indices
 
-        if metric == 'accuracy':
-            # Plot accuracy values
-            ax.plot(x, pto_values, marker='o', label='PTO Accuracy', color='blue', alpha=0.7)
-            ax.plot(x, pao_values, marker='o', label='PAO Accuracy', color='red', alpha=0.7)
-        else:
-            # Plot macro and weighted values for precision, recall, and f1
-            ax.plot(x, macro_values_pto, marker='o', label=f'PTO Macro {metric.capitalize()}', color=colors['macro'],
-                    alpha=0.7)
-            ax.plot(x, weighted_values_pto, marker='o', label=f'PTO Weighted {metric.capitalize()}', linestyle='--',
-                    color=colors['macro'], alpha=0.7)
-            ax.plot(x, macro_values_pao, marker='o', label=f'PAO Macro {metric.capitalize()}', color=colors['weighted'],
-                    alpha=0.7)
-            ax.plot(x, weighted_values_pao, marker='o', label=f'PAO Weighted {metric.capitalize()}', linestyle='--',
-                    color=colors['weighted'], alpha=0.7)
+        for label, key, color in available_variants:
+            if metric == 'accuracy':
+                values = [data[key]["accuracy"] for data in results_data]
+                ax.plot(x, values, marker='o', label=f'{label} Accuracy', color=color, alpha=0.7)
+            else:
+                macro_values = [data[key]["macro"][metric] for data in results_data]
+                weighted_values = [data[key]["weighted"][metric] for data in results_data]
+                ax.plot(
+                    x,
+                    macro_values,
+                    marker='o',
+                    label=f'{label} Macro {metric.capitalize()}',
+                    color=color,
+                    alpha=0.7,
+                )
+                ax.plot(
+                    x,
+                    weighted_values,
+                    marker='o',
+                    label=f'{label} Weighted {metric.capitalize()}',
+                    linestyle='--',
+                    color=color,
+                    alpha=0.7,
+                )
 
         # Add text for labels, title and custom x-axis tick labels
         ax.set_xlabel('Experiments')
@@ -138,16 +150,17 @@ def plot_and_save_graphs(results_data, save_path):
         ax.set_xticklabels([f"{percent}%" for percent in percent_values], rotation=45)
         ax.legend()
 
-        # Annotate points with N_K values
-        for i, n_k in enumerate(n_k_values):
+        # Annotate points with N_K values using the first available variant to avoid clutter
+        if available_variants:
+            label, key, color = available_variants[0]
             if metric == 'accuracy':
-                ax.text(x[i], pto_values[i], f'{round(n_k, 2)}', ha='center', va='bottom', fontsize=8, color='blue')
-                ax.text(x[i], pao_values[i], f'{round(n_k, 2)}', ha='center', va='bottom', fontsize=8, color='red')
+                values = [data[key]["accuracy"] for data in results_data]
+                for i, n_k in enumerate(n_k_values):
+                    ax.text(x[i], values[i], f'{round(n_k, 2)}', ha='center', va='bottom', fontsize=8, color=color)
             else:
-                ax.text(x[i], macro_values_pto[i], f'{round(n_k, 2)}', ha='center', va='bottom', fontsize=8,
-                        color=colors['macro'])
-                ax.text(x[i], macro_values_pao[i], f'{round(n_k, 2)}', ha='center', va='bottom', fontsize=8,
-                        color=colors['weighted'])
+                values = [data[key]["macro"][metric] for data in results_data]
+                for i, n_k in enumerate(n_k_values):
+                    ax.text(x[i], values[i], f'{round(n_k, 2)}', ha='center', va='bottom', fontsize=8, color=color)
 
         ax.grid(True)
         plt.tight_layout()

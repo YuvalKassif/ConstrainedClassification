@@ -3,7 +3,6 @@ from collections import Counter, defaultdict
 from typing import Tuple, Dict, Any, List
 
 import numpy as np
-import random
 import torch
 from torch.utils.data import DataLoader, Subset
 from torch.utils.data.sampler import WeightedRandomSampler
@@ -13,25 +12,6 @@ import pandas as pd
 from medmnist import OCTMNIST, BloodMNIST, DermaMNIST, TissueMNIST, OrganCMNIST, OrganSMNIST
 
 from utils import set_seed
-
-
-def _make_worker_init_fn(base_seed: int):
-    def _init_fn(worker_id: int):
-        s = base_seed + worker_id
-        # Ensure all common RNGs are seeded identically per worker
-        try:
-            np.random.seed(s)
-        except Exception:
-            pass
-        try:
-            random.seed(s)
-        except Exception:
-            pass
-        try:
-            torch.manual_seed(s)
-        except Exception:
-            pass
-    return _init_fn
 
 
 def _flatten_target(y):
@@ -151,34 +131,14 @@ def load_imagefolder(root: str, batch_size: int, image_size: int = 224, channels
         test_ds = Subset(test_base, idx_test)
 
     num_workers = 4
-    worker_init = _make_worker_init_fn(seed)
-    g = torch.Generator()
-    g.manual_seed(seed)
+    generator = lambda wid: np.random.seed(seed + wid)
 
-    train_loader = DataLoader(
-        train_ds,
-        batch_size=batch_size,
-        shuffle=True,
-        num_workers=num_workers,
-        worker_init_fn=worker_init,
-        generator=g,
-    )
-    val_loader = DataLoader(
-        val_ds,
-        batch_size=batch_size,
-        shuffle=False,
-        num_workers=num_workers,
-        worker_init_fn=worker_init,
-        generator=g,
-    )
-    test_loader = DataLoader(
-        test_ds,
-        batch_size=batch_size,
-        shuffle=False,
-        num_workers=num_workers,
-        worker_init_fn=worker_init,
-        generator=g,
-    )
+    train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=num_workers,
+                              worker_init_fn=generator)
+    val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False, num_workers=num_workers,
+                            worker_init_fn=generator)
+    test_loader = DataLoader(test_ds, batch_size=batch_size, shuffle=False, num_workers=num_workers,
+                             worker_init_fn=generator)
 
     # Determine num_classes and names
     if hasattr(train_ds, 'dataset') and hasattr(train_ds.dataset, 'classes'):
@@ -232,11 +192,9 @@ def load_medmnist_oct(batch_size: int = 32, seed: int = 42):
     val_dataset = OCTMNIST(split='val', transform=transform, target_transform=target_tf, download=False)
     test_dataset = OCTMNIST(split='test', transform=transform, target_transform=target_tf, download=False)
 
-    worker_init = _make_worker_init_fn(seed)
-    g = torch.Generator(); g.manual_seed(seed)
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=4, worker_init_fn=worker_init, generator=g)
-    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=4, worker_init_fn=worker_init, generator=g)
-    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=4, worker_init_fn=worker_init, generator=g)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=4)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=4)
+    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=4)
 
     meta = {
         'num_classes': 4,
@@ -263,11 +221,9 @@ def load_medmnist_blood(batch_size: int = 32, seed: int = 42):
     val_dataset = BloodMNIST(split='val', transform=transform, target_transform=target_tf, download=False)
     test_dataset = BloodMNIST(split='test', transform=transform, target_transform=target_tf, download=False)
 
-    worker_init = _make_worker_init_fn(seed)
-    g = torch.Generator(); g.manual_seed(seed)
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=4, worker_init_fn=worker_init, generator=g)
-    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=4, worker_init_fn=worker_init, generator=g)
-    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=4, worker_init_fn=worker_init, generator=g)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=4)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=4)
+    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=4)
 
     meta = {
         'num_classes': 8,
@@ -293,11 +249,9 @@ def load_medmnist_derma(batch_size: int = 32, seed: int = 42):
     val_dataset = DermaMNIST(split='val', transform=transform, target_transform=target_tf, download=False)
     test_dataset = DermaMNIST(split='test', transform=transform, target_transform=target_tf, download=False)
 
-    worker_init = _make_worker_init_fn(seed)
-    g = torch.Generator(); g.manual_seed(seed)
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=4, worker_init_fn=worker_init, generator=g)
-    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=4, worker_init_fn=worker_init, generator=g)
-    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=4, worker_init_fn=worker_init, generator=g)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=4)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=4)
+    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=4)
 
     meta = {
         'num_classes': 7,
@@ -323,11 +277,9 @@ def load_medmnist_tissue(batch_size: int = 32, seed: int = 42):
     val_dataset = TissueMNIST(split='val', transform=transform, target_transform=target_tf, download=False)
     test_dataset = TissueMNIST(split='test', transform=transform, target_transform=target_tf, download=False)
 
-    worker_init = _make_worker_init_fn(seed)
-    g = torch.Generator(); g.manual_seed(seed)
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=4, worker_init_fn=worker_init, generator=g)
-    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=4, worker_init_fn=worker_init, generator=g)
-    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=4, worker_init_fn=worker_init, generator=g)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=4)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=4)
+    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=4)
 
     meta = {
         'num_classes': 8,
@@ -353,11 +305,9 @@ def load_medmnist_organc(batch_size: int = 32, seed: int = 42):
     val_dataset = OrganCMNIST(split='val', transform=transform, target_transform=target_tf, download=False)
     test_dataset = OrganCMNIST(split='test', transform=transform, target_transform=target_tf, download=False)
 
-    worker_init = _make_worker_init_fn(seed)
-    g = torch.Generator(); g.manual_seed(seed)
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=4, worker_init_fn=worker_init, generator=g)
-    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=4, worker_init_fn=worker_init, generator=g)
-    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=4, worker_init_fn=worker_init, generator=g)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=4)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=4)
+    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=4)
 
     # MedMNIST v2 OrganCMNIST has 11 classes
     meta = {
@@ -384,11 +334,9 @@ def load_medmnist_organs(batch_size: int = 32, seed: int = 42):
     val_dataset = OrganSMNIST(split='val', transform=transform, target_transform=target_tf, download=False)
     test_dataset = OrganSMNIST(split='test', transform=transform, target_transform=target_tf, download=False)
 
-    worker_init = _make_worker_init_fn(seed)
-    g = torch.Generator(); g.manual_seed(seed)
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=4, worker_init_fn=worker_init, generator=g)
-    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=4, worker_init_fn=worker_init, generator=g)
-    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=4, worker_init_fn=worker_init, generator=g)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=4)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=4)
+    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=4)
 
     meta = {
         'num_classes': 11,
@@ -506,11 +454,10 @@ def load_lc25000(root: str, batch_size: int, image_size: int = 224, seed: int = 
         print(f"[DEBUG] LC25000 listdir failed for test_dir: {e}")
 
     num_workers = 4
-    worker_init = _make_worker_init_fn(seed)
-    g = torch.Generator(); g.manual_seed(seed)
-    train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=num_workers, worker_init_fn=worker_init, generator=g)
-    val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False, num_workers=num_workers, worker_init_fn=worker_init, generator=g)
-    test_loader = DataLoader(test_ds, batch_size=batch_size, shuffle=False, num_workers=num_workers, worker_init_fn=worker_init, generator=g)
+    generator = lambda wid: np.random.seed(seed + wid)
+    train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=num_workers, worker_init_fn=generator)
+    val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False, num_workers=num_workers, worker_init_fn=generator)
+    test_loader = DataLoader(test_ds, batch_size=batch_size, shuffle=False, num_workers=num_workers, worker_init_fn=generator)
 
     # Class names from the base dataset
     class_names = base_trainval.classes
@@ -628,12 +575,11 @@ def load_ham10000(root: str, batch_size: int, image_size: int = 224, seed: int =
     test_ds = _PathsDataset([paths[i] for i in idx_test], [labels[i] for i in idx_test], transform=tfs['test'])
 
     num_workers = 4
-    worker_init = _make_worker_init_fn(seed)
-    g = torch.Generator(); g.manual_seed(seed)
+    generator = lambda wid: np.random.seed(seed + wid)
 
-    train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=num_workers, worker_init_fn=worker_init, generator=g)
-    val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False, num_workers=num_workers, worker_init_fn=worker_init, generator=g)
-    test_loader = DataLoader(test_ds, batch_size=batch_size, shuffle=False, num_workers=num_workers, worker_init_fn=worker_init, generator=g)
+    train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=num_workers, worker_init_fn=generator)
+    val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False, num_workers=num_workers, worker_init_fn=generator)
+    test_loader = DataLoader(test_ds, batch_size=batch_size, shuffle=False, num_workers=num_workers, worker_init_fn=generator)
 
     meta = {
         'num_classes': len(known_classes),
@@ -754,12 +700,11 @@ def load_breakhis(root: str, batch_size: int, image_size: int = 224, seed: int =
     test_ds = _PathsDataset([paths[i] for i in idx_test], [labels[i] for i in idx_test], transform=tfs['test'])
 
     num_workers = 4
-    worker_init = _make_worker_init_fn(seed)
-    g = torch.Generator(); g.manual_seed(seed)
+    generator = lambda wid: np.random.seed(seed + wid)
 
-    train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=num_workers, worker_init_fn=worker_init, generator=g)
-    val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False, num_workers=num_workers, worker_init_fn=worker_init, generator=g)
-    test_loader = DataLoader(test_ds, batch_size=batch_size, shuffle=False, num_workers=num_workers, worker_init_fn=worker_init, generator=g)
+    train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=num_workers, worker_init_fn=generator)
+    val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False, num_workers=num_workers, worker_init_fn=generator)
+    test_loader = DataLoader(test_ds, batch_size=batch_size, shuffle=False, num_workers=num_workers, worker_init_fn=generator)
 
     meta = {
         'num_classes': len(class_names),

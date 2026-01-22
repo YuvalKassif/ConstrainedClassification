@@ -1,0 +1,144 @@
+import torch
+import torch.optim as optim
+from datetime import datetime
+
+from config import get_experiment_config
+from utils import (
+    set_seed,
+    get_model,
+    plot_training_results,
+    count_predictions_per_class,
+    save_test_counts,
+    save_parameters,
+)
+from train import train_model, LRScheduler
+from load_data import get_dataloaders
+from losses import LagrangianConstraintLoss
+from optimization import constrained_classification
+
+
+def _compute_counts(loader, num_classes):
+    label_counts = {}
+    for _, labels in loader:
+        if labels.dim() > 1:
+            labels = labels.squeeze()
+        for y in labels:
+            yv = int(y.item())
+            label_counts[yv] = label_counts.get(yv, 0) + 1
+    return [label_counts.get(i, 0) for i in range(num_classes)]
+
+
+def main():
+    seed = 42
+    set_seed(seed)
+
+    params, exp_name = get_experiment_config()
+
+    if torch.cuda.is_available():
+        device = torch.device(f"cuda:{int(params.get('gpu_index', 0))}")
+    else:
+        device = torch.device("cpu")
+
+    train_loader, val_loader, test_loader, data_meta = get_dataloaders(params)
+    num_classes = data_meta.get("num_classes") or 4
+
+    constrained_class_index = params["constrained_class_index"]
+    if constrained_class_index >= num_classes:
+        constrained_class_index = num_classes - 1
+
+    train_counts = _compute_counts(train_loader, num_classes)
+    test_counts = _compute_counts(test_loader, num_classes)
+    total_train = sum(train_counts) if train_counts else len(train_loader.dataset)
+    total_test = sum(test_counts) if test_counts else len(test_loader.dataset)
+
+    constraints_percentage_list = [90, 70, 50, 30]
+    base_timestamp = datetime.now().strftime("%m-%d/experiment_files/%H-%M")
+
+    # Lagrangian penalty weight; tune if needed
+    lagrangian_lambda = float(params.get("lagrangian_lambda", 1.0))
+
+    for percent in constraints_percentage_list:
+        N_K_val = test_counts[constrained_class_index] * percent / 100.0
+        constraint_ratio = (
+            (train_counts[constrained_class_index] * percent / 100.0) / float(total_train)
+            if total_train
+            else 0.0
+        )
+
+        model = get_model(params["model_choice"], num_classes=num_classes).to(device)
+        criterion = LagrangianConstraintLoss(
+            constrained_class_index=constrained_class_index,
+            constraint_ratio=constraint_ratio,
+            num_classes=num_classes,
+            lam=lagrangian_lambda,
+            device=device,
+        )
+
+        optimizer = optim.Adam(model.parameters(), lr=params["initial_learning_rate"], weight_decay=params["weight_decay"])
+        scheduler = LRScheduler(init_lr=params["initial_learning_rate"], lr_decay_epoch=params["decay_epoch"])
+
+        iteration_timestamp = datetime.now().strftime("%d-%m-%H-%M")
+        history, total_time, current_model = train_model(
+            model,
+            criterion,
+            optimizer,
+            scheduler,
+            device,
+            train_loader,
+            val_loader,
+            early_stopping_patience=params["patience"],
+            timestamp=base_timestamp,
+            iteration_timestamp=iteration_timestamp,
+            num_epochs=params["epochs"],
+        )
+
+        class_count = count_predictions_per_class(current_model, test_loader, device)
+        save_test_counts(
+            class_count,
+            exp_name=params["exp_name"],
+            timestamp=base_timestamp,
+            iteration_timestamp=iteration_timestamp,
+            dataset=params.get("dataset", "unknown_dataset"),
+            constrained_class_index=constrained_class_index,
+        )
+
+        plot_training_results(
+            history,
+            params["model_choice"],
+            total_time,
+            params,
+            timestamp=base_timestamp,
+            iteration_timestamp=iteration_timestamp,
+        )
+
+        lagrangian_results = constrained_classification(
+            current_model,
+            None,
+            test_loader,
+            constrained_class_index,
+            N_K_val,
+            device,
+            save_path="raw_results_lagrangian.csv",
+        )
+
+        results = {
+            "Lagrangian_results": lagrangian_results,
+            "counts": class_count,
+            "constrained_class": constrained_class_index,
+            "N_K": N_K_val,
+            "percent": percent,
+        }
+
+        save_parameters(
+            results,
+            exp_name,
+            base_timestamp,
+            iteration_timestamp,
+            filename="results_lagrangian.json",
+            dataset=params.get("dataset", "unknown_dataset"),
+            constrained_class_index=constrained_class_index,
+        )
+
+
+if __name__ == "__main__":
+    main()

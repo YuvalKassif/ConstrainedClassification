@@ -23,8 +23,6 @@ def get_experiment_config(iteration=0, num_iterations=None):
         "data_dir_ham10000": '/home/dsi/kassify/Research2019/datasets/HAM10000',  # Set to the folder containing HAM10000 images/metadata
         "data_dir_breakhis": None,  # Set to the BreaKHis dataset root
 
-        # Optional backend controls
-        "disable_cudnn": True,  # Set True to work around rare cuDNN internal errors
         "data_dir_breakhis": '/home/dsi/kassify/Research2019/datasets/BreaKHis',  # Set to the BreaKHis dataset root
         # Optional BreaKHis controls
         "breakhis_granularity": 'subtype',  # 'binary' or 'subtype'
@@ -40,7 +38,7 @@ def get_experiment_config(iteration=0, num_iterations=None):
         "num_iterations": num_iterations,
         "num_iteration": iteration,
         "weight_decay": 1e-4,
-        "batch_size": 16,
+        "batch_size": 32,
         "epochs": 75,
 
         # Model choice: 'medmnist' (SimpleCNN) or any of

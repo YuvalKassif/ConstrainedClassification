@@ -114,3 +114,113 @@ def evaluate_test_accuracy_with_custom_predictions(predictions, actual_labels):
     correct = (predictions == actual_labels).sum().item()
     total = actual_labels.size(0)
     return 100 * correct / total
+
+
+def constrained_classification_or(
+    model,
+    model_path,
+    test_loader,
+    constrained_class_idx,
+    constraints_number,
+    device,
+    save_path="raw_results_rabkin.csv",
+):
+    """OR-based PTO: assign labels by solving a linear optimization on probabilities."""
+    # Load the model state dict if a model path is provided
+    if model_path is not None:
+        model.load_state_dict(torch.load(model_path))
+    model.to(device)
+    model.eval()
+
+    # Store probabilities and labels for post-processing
+    all_probabilities = []
+    all_labels = []
+
+    with torch.no_grad():
+        for inputs, labels in test_loader:
+            inputs = inputs.to(device)
+            outputs = model(inputs)
+            probabilities = torch.nn.functional.softmax(outputs, dim=1)
+            all_probabilities.append(probabilities.cpu())
+            all_labels.append(labels.cpu())
+
+    all_probabilities = torch.cat(all_probabilities)
+    all_labels = torch.cat(all_labels).view(-1)
+
+    # OR formulation: maximize sum of assigned probabilities, subject to class cap
+    try:
+        from ortools.linear_solver import pywraplp
+    except Exception as e:
+        raise RuntimeError(
+            "Rabkin OR solver requires ortools. Install it or provide the paper code."
+        ) from e
+
+    probs = all_probabilities.numpy()
+    num_samples, num_classes = probs.shape
+    k_cap = int(constraints_number)
+
+    solver = pywraplp.Solver.CreateSolver("GLOP")
+    if solver is None:
+        raise RuntimeError("Failed to create OR-Tools solver (GLOP).")
+
+    x = {}
+    objective = 0.0
+    for i in range(num_samples):
+        for j in range(num_classes):
+            x[(i, j)] = solver.NumVar(0.0, 1.0, f"x_{i}_{j}")
+            objective += (-float(probs[i, j])) * x[(i, j)]
+
+    solver.Minimize(objective)
+
+    for i in range(num_samples):
+        solver.Add(sum(x[(i, j)] for j in range(num_classes)) == 1.0)
+
+    solver.Add(
+        sum(x[(i, constrained_class_idx)] for i in range(num_samples)) <= float(k_cap)
+    )
+
+    status = solver.Solve()
+    if status != pywraplp.Solver.OPTIMAL:
+        raise RuntimeError(f"OR solver failed with status={status}")
+
+    predictions = torch.zeros_like(all_labels)
+    for i in range(num_samples):
+        best_j = 0
+        best_val = -1.0
+        for j in range(num_classes):
+            val = x[(i, j)].solution_value()
+            if val > best_val:
+                best_val = val
+                best_j = j
+        predictions[i] = int(best_j)
+
+    # Save raw data to a CSV file for manual calculations
+    try:
+        raw_data = pd.DataFrame({
+            "actual_label": all_labels.numpy(),
+            "predicted_label": predictions.numpy(),
+            "constrained_probability": all_probabilities[:, constrained_class_idx].numpy(),
+        })
+        for class_idx in range(all_probabilities.size(1)):
+            raw_data[f"probability_class_{class_idx}"] = all_probabilities[:, class_idx].numpy()
+        raw_data.to_csv(save_path, index=False)
+        print(f"Raw data saved to {save_path}")
+    except Exception as e:
+        print(f"[ERROR] Failed to save raw data to CSV: {e}")
+
+    accuracy = evaluate_test_accuracy_with_custom_predictions(predictions, all_labels)
+    precision_macro = precision_score(all_labels.numpy(), predictions.numpy(), average="macro")
+    recall_macro = recall_score(all_labels.numpy(), predictions.numpy(), average="macro")
+    f1_macro = f1_score(all_labels.numpy(), predictions.numpy(), average="macro")
+
+    precision_weighted = precision_score(all_labels.numpy(), predictions.numpy(), average="weighted")
+    recall_weighted = recall_score(all_labels.numpy(), predictions.numpy(), average="weighted")
+    f1_weighted = f1_score(all_labels.numpy(), predictions.numpy(), average="weighted")
+
+    print(classification_report(all_labels.numpy(), predictions.numpy()))
+
+    return {
+        "accuracy": accuracy,
+        "macro": {"precision": precision_macro, "recall": recall_macro, "f1": f1_macro},
+        "weighted": {"precision": precision_weighted, "recall": recall_weighted, "f1": f1_weighted},
+    }
