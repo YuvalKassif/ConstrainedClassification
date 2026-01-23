@@ -46,6 +46,11 @@ else:
 # Get experiment configuration
 params, exp_name = get_experiment_config()
 
+# Ensure PathMNIST uses a 3-channel model if misconfigured.
+ds_name = str(params.get("dataset", "")).lower()
+if ds_name in ("medmnist_path", "pathmnist", "path") and params.get("model_choice") == "medmnist":
+    params["model_choice"] = "EfficientNetB5"
+
 # Reconcile device selection with config after params load
 if torch.cuda.is_available():
     cfg_gpu = params.get('gpu_index', preferred_gpu)

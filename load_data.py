@@ -9,7 +9,7 @@ from torch.utils.data.sampler import WeightedRandomSampler
 from torchvision import datasets, transforms
 from PIL import Image
 import pandas as pd
-from medmnist import OCTMNIST, BloodMNIST, DermaMNIST, TissueMNIST, OrganCMNIST, OrganSMNIST
+from medmnist import OCTMNIST, BloodMNIST, DermaMNIST, TissueMNIST, OrganCMNIST, OrganSMNIST, PathMNIST
 
 from utils import set_seed
 
@@ -262,6 +262,34 @@ def load_medmnist_derma(batch_size: int = 32, seed: int = 42):
     return train_loader, val_loader, test_loader, meta
 
 
+def load_medmnist_path(batch_size: int = 32, seed: int = 42):
+    """Load MedMNIST PathMNIST (RGB, 9 classes)."""
+    set_seed(seed)
+
+    transform = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
+    ])
+
+    target_tf = transforms.Lambda(_flatten_target)
+
+    train_dataset = PathMNIST(split='train', transform=transform, target_transform=target_tf, download=True)
+    val_dataset = PathMNIST(split='val', transform=transform, target_transform=target_tf, download=True)
+    test_dataset = PathMNIST(split='test', transform=transform, target_transform=target_tf, download=True)
+
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=4)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=4)
+    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=4)
+
+    meta = {
+        'num_classes': 9,
+        'class_names': [str(i) for i in range(9)],
+        'channels': 3,
+        'image_size': 28
+    }
+    return train_loader, val_loader, test_loader, meta
+
+
 def load_medmnist_tissue(batch_size: int = 32, seed: int = 42):
     """Load MedMNIST TissueMNIST (grayscale, 8 classes)."""
     set_seed(seed)
@@ -359,6 +387,8 @@ def get_dataloaders(params) -> Tuple[DataLoader, DataLoader, DataLoader, Dict[st
         return load_medmnist_blood(batch_size=batch_size, seed=seed)
     elif dataset in ('medmnist_derma', 'dermamnist', 'dermamnist_v2', 'derma'):
         return load_medmnist_derma(batch_size=batch_size, seed=seed)
+    elif dataset in ('medmnist_path', 'pathmnist', 'path'):
+        return load_medmnist_path(batch_size=batch_size, seed=seed)
     elif dataset in ('medmnist_tissue', 'tissuemnist', 'tissue'):
         return load_medmnist_tissue(batch_size=batch_size, seed=seed)
     elif dataset in ('medmnist_organ_c', 'organ_cmnist', 'organcmnist', 'organ_c'):

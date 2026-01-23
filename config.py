@@ -5,11 +5,12 @@ def get_experiment_config(iteration=0, num_iterations=None):
     exp_name = generate_exp_name()
 
     # Choose one of: 'kneeKL224', 'medmnist_oct', 'medmnist_blood' (alias: 'bloodmnist'),
-    # 'medmnist_derma' (aliases: 'dermamnist', 'derma'), 'medmnist_tissue' (aliases: 'tissuemnist', 'tissue'),
+    # 'medmnist_derma' (aliases: 'dermamnist', 'derma'), 'medmnist_path' (aliases: 'pathmnist', 'path'),
+    # 'medmnist_tissue' (aliases: 'tissuemnist', 'tissue'),
     # 'medmnist_organ_c' (aliases: 'organ_cmnist', 'organcmnist', 'organ_c'),
     # 'medmnist_organ_s' (aliases: 'organ_smnist', 'organsmnist', 'organ_s'), 'lc25000',
     # 'ham10000' (aliases: 'ham', 'isic_ham'), 'breakhis' (breast histology)
-    dataset = 'medmnist_derma'
+    dataset = 'medmnist_path'
 
     params = {
         "exp_name": exp_name,

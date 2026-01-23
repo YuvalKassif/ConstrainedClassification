@@ -364,6 +364,9 @@ def main():
             "medmnist_organ_s", "organ_smnist", "organsmnist", "organ_s",
         ):
             params["model_choice"] = "medmnist"
+        elif ds in ("medmnist_path", "pathmnist", "path"):
+            # PathMNIST is RGB; use 3-channel model.
+            params["model_choice"] = "EfficientNetB5"
         else:
             params["model_choice"] = "EfficientNetB5"
 
