@@ -41,9 +41,11 @@ def get_experiment_config(iteration=0, num_iterations=None):
         "weight_decay": 1e-4,
         "batch_size": 32,
         "epochs": 75,
+        # Train sampler: use class-balanced sampling to mitigate imbalance
+        "use_weighted_sampler": True,
 
         # Model choice: 'medmnist' (SimpleCNN) or any of
-        # 'EfficientNetB0', 'EfficientNetB5', 'ResNet50', 'ResNet101'
+        # 'EfficientNetB0', 'EfficientNetB5', 'ResNet18', 'ResNet50', 'ResNet101'
         # Defaults:
         # - medmnist_oct, medmnist_tissue, medmnist_organ_c, medmnist_organ_s -> 'medmnist' (1-channel SimpleCNN)
         # - medmnist_blood/derma -> EfficientNet/ResNet (RGB)

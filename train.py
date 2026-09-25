@@ -1,6 +1,7 @@
 import torch
 import time
 from pathlib import Path
+import copy
 
 
 class LRScheduler:
@@ -32,6 +33,7 @@ def train_model(model, criterion, optimizer, scheduler, device, train_loader, va
     best_val_loss = float('inf')  # Initialize with infinity for tracking best validation loss
     early_stopping_counter = 0
     best_model = None
+    best_model_state = None
 
     start_time = time.time()
     history = {'train_loss': [], 'val_loss': [], 'train_acc': [], 'val_acc': []}
@@ -128,7 +130,8 @@ def train_model(model, criterion, optimizer, scheduler, device, train_loader, va
         # Early Stopping Logic - Based on Validation Loss
         if val_loss < best_val_loss:
             best_val_loss = val_loss
-            best_model = model
+            # Snapshot weights to avoid later epochs overwriting the "best" model.
+            best_model_state = copy.deepcopy(model.state_dict())
             early_stopping_counter = 0  # Reset patience counter if validation loss improves
         else:
             early_stopping_counter += 1  # Increment patience counter if no improvement
@@ -138,6 +141,10 @@ def train_model(model, criterion, optimizer, scheduler, device, train_loader, va
                 f'Stopping early at epoch {epoch + 1} due to no improvement in validation loss for {early_stopping_patience} epochs.')
             break
 
-    total_time = time.time() - start_time
+    if best_model_state is not None:
+        model.load_state_dict(best_model_state)
+        best_model = model
+
+    total_time = time.time()     - start_time
     print('The total training time is ', total_time, 'seconds')
     return history, total_time, best_model

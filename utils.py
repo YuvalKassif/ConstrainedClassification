@@ -10,6 +10,7 @@ import random
 import datetime
 from datetime import datetime
 import torch.nn.functional as F
+from torch.utils.data import Subset
 
 
 def evaluate_test_accuracy(model, test_loader, device):
@@ -81,6 +82,10 @@ def get_model(model_name, num_classes=5):
         model = models.resnet50(pretrained=True)
         num_ftrs = model.fc.in_features
         model.fc = nn.Linear(num_ftrs, num_classes)
+    elif model_name == 'ResNet18':
+        model = models.resnet18(pretrained=True)
+        num_ftrs = model.fc.in_features
+        model.fc = nn.Linear(num_ftrs, num_classes)
     elif model_name == 'ResNet101':
         model = models.resnet101(pretrained=True)
         num_ftrs = model.fc.in_features
@@ -137,6 +142,94 @@ def plot_training_results(history, model_choice, total_time, params, timestamp, 
     plt.show()  # Show the plot after saving
 
     plt.close()  # Close the figure to free memory
+
+
+def _extract_dataset_targets(dataset):
+    if isinstance(dataset, Subset):
+        base_targets = _extract_dataset_targets(dataset.dataset)
+        return [base_targets[i] for i in dataset.indices]
+    if hasattr(dataset, 'targets'):
+        targets = dataset.targets
+    elif hasattr(dataset, 'labels'):
+        targets = dataset.labels
+    elif hasattr(dataset, 'samples'):
+        targets = [label for _, label in dataset.samples]
+    else:
+        raise ValueError("Dataset missing 'targets'/'labels'/'samples'.")
+
+    if isinstance(targets, torch.Tensor):
+        targets = targets.cpu().numpy()
+    elif isinstance(targets, list):
+        targets = np.array(targets)
+
+    if hasattr(targets, "ndim") and targets.ndim > 1:
+        targets = targets.flatten()
+
+    return [int(t) for t in targets]
+
+
+def _counts_from_dataset(dataset, num_classes=None):
+    targets = _extract_dataset_targets(dataset)
+    if not targets:
+        return []
+    if num_classes is None:
+        num_classes = max(targets) + 1
+    counts = [0] * num_classes
+    for t in targets:
+        if 0 <= t < num_classes:
+            counts[t] += 1
+    return counts
+
+
+def plot_class_distribution(train_loader, val_loader, test_loader, params, timestamp, class_names=None, num_classes=None):
+    dataset = params.get("dataset", "unknown_dataset")
+    constrained_idx = params.get("constrained_class_index", params.get("constrained_class", "unknown_constraint"))
+    save_dir = Path(f'results/{dataset}/{constrained_idx}/{timestamp}')
+    save_dir.mkdir(parents=True, exist_ok=True)
+    save_path = save_dir / "class_distribution.png"
+
+    train_counts = _counts_from_dataset(train_loader.dataset, num_classes=num_classes)
+    val_counts = _counts_from_dataset(val_loader.dataset, num_classes=num_classes)
+    test_counts = _counts_from_dataset(test_loader.dataset, num_classes=num_classes)
+
+    if num_classes is None:
+        num_classes = max(len(train_counts), len(val_counts), len(test_counts))
+
+    def _pad(counts):
+        return counts + [0] * (num_classes - len(counts))
+
+    train_counts = _pad(train_counts)
+    val_counts = _pad(val_counts)
+    test_counts = _pad(test_counts)
+    all_counts = [train_counts[i] + val_counts[i] + test_counts[i] for i in range(num_classes)]
+
+    if class_names and len(class_names) == num_classes:
+        x_labels = class_names
+    else:
+        x_labels = [str(i) for i in range(num_classes)]
+
+    fig, axes = plt.subplots(2, 2, figsize=(14, 8), sharey=True)
+    axes = axes.flatten()
+    panels = [
+        ("Train", train_counts),
+        ("Val", val_counts),
+        ("Test", test_counts),
+        ("All", all_counts),
+    ]
+
+    x = np.arange(num_classes)
+    for ax, (title, counts) in zip(axes, panels):
+        ax.bar(x, counts, color="#4C78A8", alpha=0.85)
+        ax.set_title(f"{dataset} - {title}")
+        ax.set_xticks(x)
+        ax.set_xticklabels(x_labels, rotation=45, ha="right")
+        ax.grid(True, axis="y", linestyle=":")
+
+    fig.suptitle(f"Class Distribution - {dataset}", y=1.02)
+    fig.tight_layout()
+    fig.savefig(save_path, dpi=150)
+    plt.close(fig)
+    print(f"Class distribution plot saved to {save_path}")
 
 
 def plot_comparison():

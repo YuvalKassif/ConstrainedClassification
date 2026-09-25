@@ -29,7 +29,10 @@ def _flatten_target(y):
         return int(y) if not isinstance(y, (list, tuple)) else int(y[0])
 
 
-def get_weighted_sampler(dataset) -> WeightedRandomSampler:
+def _extract_targets(dataset):
+    if isinstance(dataset, Subset):
+        base_targets = _extract_targets(dataset.dataset)
+        return [base_targets[i] for i in dataset.indices]
     if hasattr(dataset, 'targets'):
         targets = dataset.targets
     elif hasattr(dataset, 'labels'):
@@ -44,9 +47,14 @@ def get_weighted_sampler(dataset) -> WeightedRandomSampler:
     elif isinstance(targets, list):
         targets = np.array(targets)
 
-    if targets.ndim > 1:
+    if hasattr(targets, "ndim") and targets.ndim > 1:
         targets = targets.flatten()
 
+    return [int(t) for t in targets]
+
+
+def get_weighted_sampler(dataset) -> WeightedRandomSampler:
+    targets = _extract_targets(dataset)
     class_counts = Counter(targets)
     class_weights = {cls: 1.0 / count for cls, count in class_counts.items()}
     sample_weights = np.array([class_weights[label] for label in targets])
@@ -105,7 +113,7 @@ def _stratified_indices(targets: List[int], splits=(0.7, 0.15, 0.15), seed: int 
 
 def load_imagefolder(root: str, batch_size: int, image_size: int = 224, channels: int = 3,
                      mean: List[float] = None, std: List[float] = None, seed: int = 42,
-                     splits=(0.7, 0.15, 0.15)):
+                     splits=(0.7, 0.15, 0.15), use_weighted_sampler: bool = False):
     if mean is None or std is None:
         if channels == 3:
             mean, std = [0.66133188] * 3, [0.21229856] * 3
@@ -133,8 +141,9 @@ def load_imagefolder(root: str, batch_size: int, image_size: int = 224, channels
     num_workers = 4
     generator = lambda wid: np.random.seed(seed + wid)
 
-    train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=num_workers,
-                              worker_init_fn=generator)
+    sampler = get_weighted_sampler(train_ds) if use_weighted_sampler else None
+    train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=(sampler is None), sampler=sampler,
+                              num_workers=num_workers, worker_init_fn=generator)
     val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False, num_workers=num_workers,
                             worker_init_fn=generator)
     test_loader = DataLoader(test_ds, batch_size=batch_size, shuffle=False, num_workers=num_workers,
@@ -177,7 +186,7 @@ class _PathsDataset(torch.utils.data.Dataset):
         return img, y
 
 
-def load_medmnist_oct(batch_size: int = 32, seed: int = 42):
+def load_medmnist_oct(batch_size: int = 32, seed: int = 42, use_weighted_sampler: bool = False):
     set_seed(seed)
 
     transform = transforms.Compose([
@@ -192,7 +201,8 @@ def load_medmnist_oct(batch_size: int = 32, seed: int = 42):
     val_dataset = OCTMNIST(split='val', transform=transform, target_transform=target_tf, download=False)
     test_dataset = OCTMNIST(split='test', transform=transform, target_transform=target_tf, download=False)
 
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=4)
+    sampler = get_weighted_sampler(train_dataset) if use_weighted_sampler else None
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=(sampler is None), sampler=sampler, num_workers=4)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=4)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=4)
 
@@ -205,7 +215,7 @@ def load_medmnist_oct(batch_size: int = 32, seed: int = 42):
     return train_loader, val_loader, test_loader, meta
 
 
-def load_medmnist_blood(batch_size: int = 32, seed: int = 42):
+def load_medmnist_blood(batch_size: int = 32, seed: int = 42, use_weighted_sampler: bool = False):
     """Load MedMNIST BloodMNIST (RGB, 8 classes)."""
     set_seed(seed)
 
@@ -221,7 +231,8 @@ def load_medmnist_blood(batch_size: int = 32, seed: int = 42):
     val_dataset = BloodMNIST(split='val', transform=transform, target_transform=target_tf, download=False)
     test_dataset = BloodMNIST(split='test', transform=transform, target_transform=target_tf, download=False)
 
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=4)
+    sampler = get_weighted_sampler(train_dataset) if use_weighted_sampler else None
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=(sampler is None), sampler=sampler, num_workers=4)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=4)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=4)
 
@@ -234,7 +245,7 @@ def load_medmnist_blood(batch_size: int = 32, seed: int = 42):
     return train_loader, val_loader, test_loader, meta
 
 
-def load_medmnist_derma(batch_size: int = 32, seed: int = 42):
+def load_medmnist_derma(batch_size: int = 32, seed: int = 42, use_weighted_sampler: bool = False):
     """Load MedMNIST DermaMNIST (RGB, 7 classes)."""
     set_seed(seed)
 
@@ -249,7 +260,8 @@ def load_medmnist_derma(batch_size: int = 32, seed: int = 42):
     val_dataset = DermaMNIST(split='val', transform=transform, target_transform=target_tf, download=False)
     test_dataset = DermaMNIST(split='test', transform=transform, target_transform=target_tf, download=False)
 
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=4)
+    sampler = get_weighted_sampler(train_dataset) if use_weighted_sampler else None
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=(sampler is None), sampler=sampler, num_workers=4)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=4)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=4)
 
@@ -262,7 +274,7 @@ def load_medmnist_derma(batch_size: int = 32, seed: int = 42):
     return train_loader, val_loader, test_loader, meta
 
 
-def load_medmnist_path(batch_size: int = 32, seed: int = 42):
+def load_medmnist_path(batch_size: int = 32, seed: int = 42, use_weighted_sampler: bool = False):
     """Load MedMNIST PathMNIST (RGB, 9 classes)."""
     set_seed(seed)
 
@@ -277,7 +289,8 @@ def load_medmnist_path(batch_size: int = 32, seed: int = 42):
     val_dataset = PathMNIST(split='val', transform=transform, target_transform=target_tf, download=True)
     test_dataset = PathMNIST(split='test', transform=transform, target_transform=target_tf, download=True)
 
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=4)
+    sampler = get_weighted_sampler(train_dataset) if use_weighted_sampler else None
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=(sampler is None), sampler=sampler, num_workers=4)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=4)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=4)
 
@@ -290,7 +303,7 @@ def load_medmnist_path(batch_size: int = 32, seed: int = 42):
     return train_loader, val_loader, test_loader, meta
 
 
-def load_medmnist_tissue(batch_size: int = 32, seed: int = 42):
+def load_medmnist_tissue(batch_size: int = 32, seed: int = 42, use_weighted_sampler: bool = False):
     """Load MedMNIST TissueMNIST (grayscale, 8 classes)."""
     set_seed(seed)
 
@@ -305,7 +318,8 @@ def load_medmnist_tissue(batch_size: int = 32, seed: int = 42):
     val_dataset = TissueMNIST(split='val', transform=transform, target_transform=target_tf, download=False)
     test_dataset = TissueMNIST(split='test', transform=transform, target_transform=target_tf, download=False)
 
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=4)
+    sampler = get_weighted_sampler(train_dataset) if use_weighted_sampler else None
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=(sampler is None), sampler=sampler, num_workers=4)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=4)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=4)
 
@@ -318,7 +332,7 @@ def load_medmnist_tissue(batch_size: int = 32, seed: int = 42):
     return train_loader, val_loader, test_loader, meta
 
 
-def load_medmnist_organc(batch_size: int = 32, seed: int = 42):
+def load_medmnist_organc(batch_size: int = 32, seed: int = 42, use_weighted_sampler: bool = False):
     """Load MedMNIST OrganCMNIST (grayscale, 11 classes)."""
     set_seed(seed)
 
@@ -333,7 +347,8 @@ def load_medmnist_organc(batch_size: int = 32, seed: int = 42):
     val_dataset = OrganCMNIST(split='val', transform=transform, target_transform=target_tf, download=False)
     test_dataset = OrganCMNIST(split='test', transform=transform, target_transform=target_tf, download=False)
 
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=4)
+    sampler = get_weighted_sampler(train_dataset) if use_weighted_sampler else None
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=(sampler is None), sampler=sampler, num_workers=4)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=4)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=4)
 
@@ -347,7 +362,7 @@ def load_medmnist_organc(batch_size: int = 32, seed: int = 42):
     return train_loader, val_loader, test_loader, meta
 
 
-def load_medmnist_organs(batch_size: int = 32, seed: int = 42):
+def load_medmnist_organs(batch_size: int = 32, seed: int = 42, use_weighted_sampler: bool = False):
     """Load MedMNIST OrganSMNIST (grayscale, 11 classes)."""
     set_seed(seed)
 
@@ -362,7 +377,8 @@ def load_medmnist_organs(batch_size: int = 32, seed: int = 42):
     val_dataset = OrganSMNIST(split='val', transform=transform, target_transform=target_tf, download=False)
     test_dataset = OrganSMNIST(split='test', transform=transform, target_transform=target_tf, download=False)
 
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=4)
+    sampler = get_weighted_sampler(train_dataset) if use_weighted_sampler else None
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=(sampler is None), sampler=sampler, num_workers=4)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=4)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=4)
 
@@ -379,34 +395,37 @@ def get_dataloaders(params) -> Tuple[DataLoader, DataLoader, DataLoader, Dict[st
     dataset = params.get('dataset', 'medmnist_oct')
     batch_size = params.get('batch_size', 32)
     seed = int(params.get('seed', 42))
+    use_weighted_sampler = bool(params.get('use_weighted_sampler', False))
     set_seed(seed)
 
     if dataset == 'medmnist_oct':
-        return load_medmnist_oct(batch_size=batch_size, seed=seed)
+        return load_medmnist_oct(batch_size=batch_size, seed=seed, use_weighted_sampler=use_weighted_sampler)
     elif dataset in ('medmnist_blood', 'bloodmnist'):
-        return load_medmnist_blood(batch_size=batch_size, seed=seed)
+        return load_medmnist_blood(batch_size=batch_size, seed=seed, use_weighted_sampler=use_weighted_sampler)
     elif dataset in ('medmnist_derma', 'dermamnist', 'dermamnist_v2', 'derma'):
-        return load_medmnist_derma(batch_size=batch_size, seed=seed)
+        return load_medmnist_derma(batch_size=batch_size, seed=seed, use_weighted_sampler=use_weighted_sampler)
     elif dataset in ('medmnist_path', 'pathmnist', 'path'):
-        return load_medmnist_path(batch_size=batch_size, seed=seed)
+        return load_medmnist_path(batch_size=batch_size, seed=seed, use_weighted_sampler=use_weighted_sampler)
     elif dataset in ('medmnist_tissue', 'tissuemnist', 'tissue'):
-        return load_medmnist_tissue(batch_size=batch_size, seed=seed)
+        return load_medmnist_tissue(batch_size=batch_size, seed=seed, use_weighted_sampler=use_weighted_sampler)
     elif dataset in ('medmnist_organ_c', 'organ_cmnist', 'organcmnist', 'organ_c'):
-        return load_medmnist_organc(batch_size=batch_size, seed=seed)
+        return load_medmnist_organc(batch_size=batch_size, seed=seed, use_weighted_sampler=use_weighted_sampler)
     elif dataset in ('medmnist_organ_s', 'organ_smnist', 'organsmnist', 'organ_s'):
-        return load_medmnist_organs(batch_size=batch_size, seed=seed)
+        return load_medmnist_organs(batch_size=batch_size, seed=seed, use_weighted_sampler=use_weighted_sampler)
     elif dataset == 'kneeKL224':
         root = params.get('data_dir_knee')
         if not root:
             raise ValueError("'data_dir_knee' must be set in params for kneeKL224 dataset.")
-        return load_imagefolder(root=root, batch_size=batch_size, image_size=224, channels=3)
+        return load_imagefolder(root=root, batch_size=batch_size, image_size=224, channels=3,
+                                use_weighted_sampler=use_weighted_sampler)
     elif dataset == 'lc25000':
         root = params.get('data_dir_lc25000')
         if not root:
             raise ValueError("'data_dir_lc25000' must be set in params for lc25000 dataset.")
         print(f"[DEBUG] LC25000 root: '{root}'")
         # LC25000 has a specific layout: 'Train and Validation Set' and 'Test Set'.
-        loaders = load_lc25000(root=root, batch_size=batch_size, image_size=224, seed=seed)
+        loaders = load_lc25000(root=root, batch_size=batch_size, image_size=224, seed=seed,
+                               use_weighted_sampler=use_weighted_sampler)
         # Debug: summarize detected classes
         try:
             _, _, _, meta = loaders
@@ -418,21 +437,23 @@ def get_dataloaders(params) -> Tuple[DataLoader, DataLoader, DataLoader, Dict[st
         root = params.get('data_dir_ham10000') or params.get('data_dir_ham')
         if not root:
             raise ValueError("'data_dir_ham10000' must be set in params for HAM10000 dataset.")
-        return load_ham10000(root=root, batch_size=batch_size, image_size=224, seed=seed)
+        return load_ham10000(root=root, batch_size=batch_size, image_size=224, seed=seed,
+                             use_weighted_sampler=use_weighted_sampler)
     elif dataset in ('breakhis', 'breakhis', 'brea_khis', 'breast_histology_breakhis'):
         root = params.get('data_dir_breakhis') or params.get('data_dir_breast_histology')
         if not root:
             raise ValueError("'data_dir_breakhis' must be set in params for BreaKHis dataset.")
         gran = params.get('breakhis_granularity', 'binary')  # 'binary' or 'subtype'
         mags = params.get('breakhis_magnifications')  # e.g., [40,100,200,400] or None for all
-        return load_breakhis(root=root, batch_size=batch_size, image_size=224, seed=seed, granularity=gran, magnifications=mags)
+        return load_breakhis(root=root, batch_size=batch_size, image_size=224, seed=seed, granularity=gran,
+                             magnifications=mags, use_weighted_sampler=use_weighted_sampler)
     else:
         raise ValueError(
             f"Unsupported dataset '{dataset}'. Choose from 'kneeKL224', 'medmnist_oct', 'medmnist_blood', 'medmnist_derma', 'medmnist_tissue', 'medmnist_organ_c', 'medmnist_organ_s', 'lc25000', 'ham10000', 'breakhis'."
         )
 
 
-def load_lc25000(root: str, batch_size: int, image_size: int = 224, seed: int = 42):
+def load_lc25000(root: str, batch_size: int, image_size: int = 224, seed: int = 42, use_weighted_sampler: bool = False):
     """Load LC25000 where root contains 'Train and Validation Set' and 'Test Set' class subfolders.
 
     Train/Val are created via stratified split from 'Train and Validation Set'.
@@ -485,7 +506,9 @@ def load_lc25000(root: str, batch_size: int, image_size: int = 224, seed: int = 
 
     num_workers = 4
     generator = lambda wid: np.random.seed(seed + wid)
-    train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=num_workers, worker_init_fn=generator)
+    sampler = get_weighted_sampler(train_ds) if use_weighted_sampler else None
+    train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=(sampler is None), sampler=sampler,
+                              num_workers=num_workers, worker_init_fn=generator)
     val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False, num_workers=num_workers, worker_init_fn=generator)
     test_loader = DataLoader(test_ds, batch_size=batch_size, shuffle=False, num_workers=num_workers, worker_init_fn=generator)
 
@@ -553,7 +576,8 @@ def _read_ham_metadata(root: str) -> pd.DataFrame:
     raise FileNotFoundError("HAM10000 metadata CSV not found under root.")
 
 
-def load_ham10000(root: str, batch_size: int, image_size: int = 224, seed: int = 42):
+def load_ham10000(root: str, batch_size: int, image_size: int = 224, seed: int = 42,
+                  use_weighted_sampler: bool = False):
     """Load HAM10000 dataset using metadata CSV for labels.
 
     - Expects images in 'HAM10000_images_part_1' and 'HAM10000_images_part_2' under root
@@ -607,7 +631,9 @@ def load_ham10000(root: str, batch_size: int, image_size: int = 224, seed: int =
     num_workers = 4
     generator = lambda wid: np.random.seed(seed + wid)
 
-    train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=num_workers, worker_init_fn=generator)
+    sampler = get_weighted_sampler(train_ds) if use_weighted_sampler else None
+    train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=(sampler is None), sampler=sampler,
+                              num_workers=num_workers, worker_init_fn=generator)
     val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False, num_workers=num_workers, worker_init_fn=generator)
     test_loader = DataLoader(test_ds, batch_size=batch_size, shuffle=False, num_workers=num_workers, worker_init_fn=generator)
 
@@ -712,7 +738,8 @@ def _collect_breakhis_paths(breast_root: str, granularity: str = 'binary', magni
 
 
 def load_breakhis(root: str, batch_size: int, image_size: int = 224, seed: int = 42,
-                  granularity: str = 'binary', magnifications: List[int] = None):
+                  granularity: str = 'binary', magnifications: List[int] = None,
+                  use_weighted_sampler: bool = False):
     set_seed(seed)
     breast_root = _resolve_breakhis_breast_root(root)
     paths, labels, class_names = _collect_breakhis_paths(breast_root, granularity=granularity, magnifications=magnifications)
@@ -732,7 +759,9 @@ def load_breakhis(root: str, batch_size: int, image_size: int = 224, seed: int =
     num_workers = 4
     generator = lambda wid: np.random.seed(seed + wid)
 
-    train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=num_workers, worker_init_fn=generator)
+    sampler = get_weighted_sampler(train_ds) if use_weighted_sampler else None
+    train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=(sampler is None), sampler=sampler,
+                              num_workers=num_workers, worker_init_fn=generator)
     val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False, num_workers=num_workers, worker_init_fn=generator)
     test_loader = DataLoader(test_ds, batch_size=batch_size, shuffle=False, num_workers=num_workers, worker_init_fn=generator)
 

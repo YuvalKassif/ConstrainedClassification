@@ -2,7 +2,7 @@ import torch
 import os
 import torch.nn as nn
 import torch.optim as optim
-from utils import set_seed, get_model, evaluate_test_accuracy, plot_training_results, count_predictions_per_class, save_test_counts, save_parameters
+from utils import set_seed, get_model, evaluate_test_accuracy, plot_training_results, count_predictions_per_class, save_test_counts, save_parameters, plot_class_distribution
 from train import train_model, LRScheduler
 from load_data import get_dataloaders, get_weighted_sampler
 from config import get_experiment_config
@@ -99,6 +99,17 @@ early_stopping_patience = params["patience"]
 # Create a timestamp for the experiment folder, only once
 base_timestamp = datetime.now().strftime("%m-%d/experiment_files/%H-%M")
 N_K_val = None
+
+# Plot class distribution once per run (train/val/test/all)
+plot_class_distribution(
+    train_loader,
+    val_loader,
+    test_loader,
+    params,
+    timestamp=base_timestamp,
+    class_names=data_meta.get("class_names"),
+    num_classes=num_classes,
+)
 
 # Compute true test counts dynamically from the test set
 def _compute_test_counts(loader):

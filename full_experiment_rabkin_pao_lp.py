@@ -346,6 +346,7 @@ def main():
     parser.add_argument("--epochs", type=int, default=None, help="Epochs override")
     parser.add_argument("--patience", type=int, default=None, help="Early stopping patience override")
     parser.add_argument("--constraints", type=int, nargs="+", default=[90, 70, 50, 30], help="Constraint percentages")
+    parser.add_argument("--mu", type=float, default=None, help="Mu override for constraint updates")
     parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility")
     args = parser.parse_args()
 
@@ -384,6 +385,8 @@ def main():
         params["epochs"] = int(args.epochs)
     if args.patience is not None:
         params["patience"] = int(args.patience)
+    if args.mu is not None:
+        params["mu"] = float(args.mu)
 
     for class_idx in range(num_classes):
         run_constraints_for_class(
